@@ -1,0 +1,40 @@
+module tools.autofix_npm {
+    import std.fs;
+    import std.log;
+    import std.proc;
+    import std.path;
+
+    export fn main() -> i32 {
+        log.info("tools.autofix_npm", "Running AutoFix-Npm ALN wrapper...");
+
+        // Check for node/npm
+        if (!std.proc.which("node")) {
+            log.warn("tools.autofix_npm", "Node.js not found. Attempting to continue but some tasks may fail.");
+        }
+
+        // Run projection if defined in package.json
+        let pkg = "package.json";
+        if (std.fs.exists(pkg)) {
+            let content = std.fs.read_file(pkg);
+            if (content.contains("aln:projection")) {
+                let rc = std.proc.exec("npm run aln:projection");
+                if (rc != 0) { log.warn("tools.autofix_npm", "aln:projection returned non-zero: " + rc.to_string()); }
+            }
+        }
+
+        // Run validation
+        if (std.fs.exists(pkg) && std.fs.read_file(pkg).contains("aln:validate")) {
+            let rc = std.proc.exec("npm run aln:validate");
+            if (rc != 0) { log.warn("tools.autofix_npm", "aln:validate returned non-zero: " + rc.to_string()); }
+        }
+
+        // Severity gate
+        if (std.fs.exists(pkg) && std.fs.read_file(pkg).contains("aln:severity-gate")) {
+            let rc = std.proc.exec("npm run aln:severity-gate");
+            if (rc != 0) { log.warn("tools.autofix_npm", "aln:severity-gate failed: " + rc.to_string()); }
+        }
+
+        log.info("tools.autofix_npm", "AutoFix-Npm sequence finished.");
+        return 0;
+    }
+}

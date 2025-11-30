@@ -138,6 +138,31 @@ npm run aln:metatest
 
 This README.md is designed to empower developers and maintainers with comprehensive, enforceable governance and tooling for ALN-based projects on GitHub, strengthening workflows, security, and collaboration for the broader GitHub community and enterprise ecosystems.
 
+## Developer UX (Quickstart)
+
+Enable local git hooks (pre-commit) to run ALN linter before committing:
+
+```powershell
+git config core.hooksPath .githooks
+```
+
+ALN CI Quickstart:
+
+- `aln/ci/core.aln` — ALN CI module scaffold (entrypoint: `aln run ci.core`).
+- `.github/workflows/aln-lint-tests.yml` — Workflow running ALN lint, tests, and build. The job uses a matrix of ALN versions and caches dependencies.
+- `docs/aln-migration.md` — Migration guide and checklist for porting Python/Node tooling into ALN modules.
+
+Run these steps locally to validate a PR:
+
+```powershell
+# Optional: install ALN runtime
+curl -sSL https://get.aln.sh/install | bash
+aln deps sync
+aln lint
+aln test
+aln run ci.core
+```
+
 For more, explore GitHub's built-in collaboration features, advanced security integrations, and automation tools that support agile, secure development and deployment [GitHub Overview].[14][15][17]
 
 ***

@@ -1,0 +1,90 @@
+module ci.core {
+    import std.fs;
+    import std.proc;
+    import std.log;
+
+    contract Step {
+        fn name() -> string;
+        fn run() -> int;
+    }
+
+    struct CmdStep {
+        label: string;
+        cmd: string;
+    }
+
+    impl Step for CmdStep {
+        fn name() -> string {
+            return self.label;
+        }
+
+        fn run() -> int {
+            log.info("ci", "running step: " + self.label);
+            let code = proc.exec(self.cmd);
+            if code != 0 {
+                log.error("ci", "step failed: " + self.label + " exit=" + code.to_string());
+            }
+            return code;
+        }
+    }
+
+    fn step_checkout() -> Step {
+        return CmdStep {
+            label: "checkout",
+            cmd: "git fetch --tags --prune --unshallow || true",
+        };
+    }
+
+    fn step_deps() -> Step {
+        return CmdStep {
+            label: "dependencies",
+            cmd: "aln deps sync",
+        };
+    }
+
+    fn step_lint() -> Step {
+        return CmdStep {
+            label: "lint",
+            cmd: "aln lint",
+        };
+    }
+
+    fn step_test() -> Step {
+        return CmdStep {
+            label: "test",
+            cmd: "aln test --report junit:reports/aln-tests.xml",
+        };
+    }
+
+    fn step_build() -> Step {
+        return CmdStep {
+            label: "build",
+            cmd: "aln build --target ci",
+        };
+    }
+
+    fn run_pipeline() -> int {
+        let steps: Step[] = [
+            step_checkout(),
+            step_deps(),
+            step_lint(),
+            step_test(),
+            step_build(),
+        ];
+
+        for s in steps {
+            let code = s.run();
+            if code != 0 {
+                log.error("ci", "pipeline failed on: " + s.name());
+                return code;
+            }
+        }
+
+        log.info("ci", "pipeline succeeded");
+        return 0;
+    }
+
+    export fn main() -> int {
+        return run_pipeline();
+    }
+}

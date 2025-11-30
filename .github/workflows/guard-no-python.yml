@@ -1,0 +1,44 @@
+name: Guard — No Python in CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  no-python-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Search workflow YAMLs for disallowed Python references
+        run: |
+          echo "Looking for 'python', 'python3', or 'pip' in workflow files..."
+          set -e
+          matches=$(grep -RIn "\bpython3?\b\|\bpip\b" .github/workflows || true)
+          if [ -n "$matches" ]; then
+            echo "Found disallowed Python references in CI workflows:";
+            echo "$matches";
+            exit 1;
+          fi
+          echo "No Python references found in workflows."
+
+      - name: Check scripts & config files for python references
+        run: |
+          echo "Looking for 'python', 'python3', 'pip' in top-level scripts and configs..."
+          matches=$(grep -RIn "\bpython3?\b\|\bpip\b" scripts || true)
+          matches2=$(grep -RIn "\bpython3?\b\|\bpip\b" . || true)
+          if [ -n "$matches" ] || [ -n "$matches2" ]; then
+            echo "Found 'python' references in repository files. Please migrate these or mark as non-CI-only."
+            echo "$matches"
+            echo "$matches2"
+            exit 1
+          fi
+          echo "No top-level Python references found in checked scripts/configs."
+
+      - name: Check run-time during CI (placeholder)
+        run: |
+          echo "Runtime log checks are not possible at static analysis time; runtime log greps need separate guard jobs or actions."
+          echo "If you need runtime check: add a job that scans running job logs for python/pip and fails; reach out to maintainers."

@@ -1,0 +1,43 @@
+module tools.ajv_mesh_sweep {
+    import std.fs;
+    import std.path;
+    import std.proc;
+    import std.log;
+
+    const SCHEMA_DIR: string = "schemas";
+    const ALN_JSON_DIR: string = "aln-json";
+    const REPORT_DIR: string = "reports";
+
+    fn ensure_dir(p: string) -> void {
+        if (!fs.exists(p)) {
+            fs.mkdir(p, { recursive: true });
+        }
+    }
+
+    // NOTE: ALN does not include a native Ajv; the module shells out to `node` ajv if present as a fallback.
+    fn run_node_ajv() -> i32 {
+        if (!std.proc.which("node")) {
+            log.error("tools.ajv_mesh_sweep", "Node.js not found; cannot run Ajv fallback.");
+            return 1;
+        }
+        // This expects the project to have a local script to run validators, fallback to `node scripts/aln-ajv-mesh-sweep.cjs`.
+        let cmd = "node scripts/aln-ajv-mesh-sweep.cjs";
+        return std.proc.exec(cmd);
+    }
+
+    export fn main() -> i32 {
+        log.info("tools.ajv_mesh_sweep", "Starting Ajv mesh sweep (ALN wrapper)...");
+
+        ensure_dir(REPORT_DIR);
+
+        // Ideally implement pure ALN JSON Schema validation; this scaffold calls node script fallback for now.
+        let code = run_node_ajv();
+        if (code != 0) {
+            log.error("tools.ajv_mesh_sweep", "Ajv mesh sweep failed (fallback)");
+            return code;
+        }
+
+        log.info("tools.ajv_mesh_sweep", "Ajv mesh sweep passed (fallback)");
+        return 0;
+    }
+}

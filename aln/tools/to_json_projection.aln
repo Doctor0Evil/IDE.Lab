@@ -1,0 +1,55 @@
+module tools.to_json_projection {
+    import std.fs;
+    import std.path;
+    import std.proc;
+    import std.log;
+
+    const ALN_DIR: string = "aln";
+    const JSON_OUTPUT_DIR: string = "aln-json";
+
+    fn ensure_dir(p: string) -> void {
+        if (!fs.exists(p)) {
+            fs.mkdir(p, { recursive: true });
+        }
+    }
+
+    fn write_json_output(relativePath: string, payload: string) -> void {
+        let outPath = JSON_OUTPUT_DIR + "/" + relativePath.replace(".aln", ".json");
+        let outDir = std.path.dirname(outPath);
+        ensure_dir(outDir);
+        fs.write_file(outPath, payload);
+    }
+
+    fn convert_file_to_projection(srcPath: string) -> string {
+        // placeholder converter; for now we produce a projection with meta data.
+        let content = fs.read_file(srcPath);
+        let projection = "{" +
+            '"projection_meta":{"source_file":"' + srcPath + '","converted_utc":"' + std.time.now().to_string() + '","profile":"aln-json-projection","version":"1.0"},' +
+            '"raw_content_hash":"' + std.hash.sha256(content) + '",' +
+            '"sample":"converted"' +
+            "}";
+        return projection;
+    }
+
+    export fn main() -> i32 {
+        log.info("tools.to_json_projection", "Starting ALN to JSON projection conversion...");
+
+        let files = std.fs.glob(ALN_DIR + "/**/*.aln");
+        if (files.len() == 0) {
+            log.info("tools.to_json_projection", "No .aln files found; nothing to project.");
+            return 0;
+        }
+
+        ensure_dir(JSON_OUTPUT_DIR);
+
+        for (f in files) {
+            let rel = std.path.relative(ALN_DIR, f);
+            let payload = convert_file_to_projection(f);
+            write_json_output(rel, payload);
+            log.info("tools.to_json_projection", "Converted: " + f + " -> " + JSON_OUTPUT_DIR + "/" + rel.replace(".aln", ".json"));
+        }
+
+        log.info("tools.to_json_projection", "ALN to JSON projection conversion complete");
+        return 0;
+    }
+}

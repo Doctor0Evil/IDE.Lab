@@ -1,0 +1,36 @@
+module tools.platform_improvements {
+    import std.proc;
+    import std.log;
+    import std.fs;
+
+    // Simple ALN wrapper to expose a few helper operations that were in PowerShell.
+
+    fn ensure_installed(cmd: string, wingetId: string) -> i32 {
+        if (std.proc.which(cmd)) {
+            log.info("tools.platform_improvements", cmd + " already available");
+            return 0;
+        }
+        if (!std.proc.which("winget")) {
+            log.warn("tools.platform_improvements", "winget not found; cannot install " + cmd);
+            return 1;
+        }
+        let cmdLine = "winget install -e --id " + wingetId + " --silent";
+        return std.proc.exec(cmdLine);
+    }
+
+    fn git_commit_push(message: string) -> i32 {
+        if (!std.proc.which("git")) {
+            log.error("tools.platform_improvements", "git is not available");
+            return 1;
+        }
+        std.proc.exec("git add .");
+        std.proc.exec("git commit -m \"" + message + "\"");
+        let status = std.proc.exec("git push");
+        return status;
+    }
+
+    export fn main() -> i32 {
+        log.info("tools.platform_improvements", "Platform improvements ALN wrapper loaded. Nothing to run by default.");
+        return 0;
+    }
+}

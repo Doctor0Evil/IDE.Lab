@@ -34,14 +34,14 @@ jobs:
       - name: Convert ALN to JSON projections
         run: |
           echo "Converting .aln documents to aln-json-projection format..."
-          # node scripts/aln-to-json-projection.cjs
+          aln run tools.to_json_projection
 
       - name: Run Ajv mesh sweep over ALN JSON views
         run: |
           echo "Running Ajv validation across all ALN JSON projections..."
-          # node scripts/aln-ajv-mesh-sweep.cjs
+          aln run tools.ajv_mesh_sweep
 
       - name: Evaluate severity gates
         run: |
           echo "Checking sevmesh-gate constraints (critical=0, high<=10)..."
-          # node scripts/aln-severity-gate.cjs
+          aln run tools.severity_gate

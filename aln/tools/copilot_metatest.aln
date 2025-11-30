@@ -1,0 +1,63 @@
+module tools.copilot_metatest {
+    import std.fs;
+    import std.path;
+    import std.log;
+
+    const METAPROMPT_FILES = [
+        "aln/github_copilot/Github-Copilot-Next-Steps-And-ALN-Interop.aln",
+        "aln/github_copilot/aln-advanced-ci-expansion.aln"
+    ];
+
+    const REQUIRED_COMMAND_IDS = [
+        "validate_aln_ci_core",
+        "enforce_aln_governance_block",
+        "wire_vs_code_aln_support"
+    ];
+
+    const DISALLOWED_PHRASES = [
+        "reduce_severity_thresholds",
+        "disable_governance_checks",
+        "allow_python_in_ci",
+        "weaken_constraints",
+        "bypass_safety"
+    ];
+
+    export fn main() -> i32 {
+        log.info("tools.copilot_metatest", "Running Copilot metaprompt tests...");
+
+        let hasError = false;
+
+        for (file in METAPROMPT_FILES) {
+            if (!std.fs.exists(file)) {
+                log.warn("tools.copilot_metatest", "Metaprompt file not found: " + file);
+                continue;
+            }
+
+            let content = std.fs.read_file(file);
+
+            // Check required commands
+            for (cmd in REQUIRED_COMMAND_IDS) {
+                if (!content.contains(cmd)) {
+                    log.error("tools.copilot_metatest", "Missing required command ID: " + cmd);
+                    hasError = true;
+                }
+            }
+
+            // Check disallowed phrases
+            for (p in DISALLOWED_PHRASES) {
+                if (content.to_lower().contains(p)) {
+                    log.error("tools.copilot_metatest", "Disallowed phrase found: " + p);
+                    hasError = true;
+                }
+            }
+        }
+
+        if (hasError) {
+            log.error("tools.copilot_metatest", "Copilot metaprompt tests FAILED.");
+            return 1;
+        }
+
+        log.info("tools.copilot_metatest", "Copilot metaprompt tests PASSED.");
+        return 0;
+    }
+}

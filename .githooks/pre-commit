@@ -1,0 +1,20 @@
+#!/bin/sh
+# Pre-commit hook to run ALN linter before allowing commit.
+# To enable: git config core.hooksPath .githooks
+
+echo "Running ALN linter..."
+if ! command -v aln >/dev/null 2>&1; then
+  echo "Error: 'aln' CLI not found. Install ALN before committing."
+  exit 1
+fi
+
+aln lint
+status=$?
+
+if [ $status -ne 0 ]; then
+  echo "ALN lint failed. Fix issues before committing."
+  exit $status
+fi
+
+echo "ALN lint passed."
+exit 0

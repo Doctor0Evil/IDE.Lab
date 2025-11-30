@@ -33,4 +33,4 @@ jobs:
       - name: Run Copilot metaprompt tests
         run: |
           echo "Validating Copilot metaprompt integrity and governance alignment..."
-          # node scripts/aln-copilot-metatest.cjs
+          aln run tools.copilot_metatest
