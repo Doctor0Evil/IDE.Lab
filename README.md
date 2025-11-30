@@ -24,6 +24,7 @@ Our objective is to enforce strict compliance, streamline project workflows, and
   - Severity gate enforcement to ensure compliance thresholds.
   - Copilot metaprompt governance validation.
   - WASM inspection and environment bootstrap utilities.
+  - NOTE: These scripts are legacy developer tools and must NOT be invoked in CI; prefer `aln/tools/*` ALN modules for automated pipelines.
 - **`.github/workflows/`** — GitHub Actions workflows for ALN validation, firmware simulation, VM validation, copilot governance, telemetry export, and staged firmware rollouts.
 
 ## Local Development and Automation

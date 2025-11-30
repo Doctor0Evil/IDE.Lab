@@ -1,0 +1,52 @@
+module tools.audit_ci {
+    import std.fs;
+    import std.log;
+    import std.json;
+    import std.env;
+    import std.time;
+
+    fn audit_path() -> string {
+        return "ci_audit.log";
+    }
+
+    fn now_rfc3339() -> string {
+        return std.time.now().to_rfc3339();
+    }
+
+    fn make_entry(repo: string, branch: string, pipeline: string, did_scope: string) -> string {
+        let obj = json.obj();
+        obj.set("ts", now_rfc3339());
+        obj.set("repo", repo);
+        obj.set("branch", branch);
+        obj.set("pipeline", pipeline);
+        obj.set("did_scope", did_scope);
+        // we intentionally do not include sensitive tokens like capability values
+        return obj.to_string();
+    }
+
+    fn append_to_log(line: string) -> bool {
+        let p = audit_path();
+        if (!fs.exists(p)) { fs.write_file(p, ""); }
+        fs.append_file(p, line + "\n");
+        return true;
+    }
+
+    export fn log_event(repo: string, branch: string, pipeline: string, did_scope: string) -> int {
+        let entry = make_entry(repo, branch, pipeline, did_scope);
+        append_to_log(entry);
+        log.info("audit_ci", "audit entry appended: repo=" + repo + ", pipeline=" + pipeline + ", scope=" + did_scope);
+        // output a redacted summary to stdout (no capability token)
+        log.info("audit_ci", entry);
+        return 0;
+    }
+
+    export fn main() -> int {
+        // show sample usage
+        let repo = env.get("GITHUB_REPOSITORY");
+        let branch = env.get("GITHUB_REF_NAME");
+        let pipeline = env.get("ALN_PIPELINE", "ci.core");
+        let did_scope = env.get("DID_PROXY_SCOPE", "unknown");
+        log_event(repo, branch, pipeline, did_scope);
+        return 0;
+    }
+}

@@ -1,12 +1,14 @@
 <#
-Inspect-Wasm.ps1
+Legacy: Inspect-Wasm.ps1 (local developer script; not used by CI)
 Purpose:
 - Safely check whether a given file contains the phrase "wasm-objdump".
 - No background jobs or infinite loops.
 - For local inspection only; does not modify files.
 
-    Usage:
-      pwsh -File .\scripts\Inspect-Wasm.ps1 -Path .\dist\module.wasm.txt
+Usage:
+    pwsh -File .\scripts\Inspect-Wasm.ps1 -Path .\dist\module.wasm.txt
+
+Note: If you need to run wasm checks as part of CI, migrate to `aln/tools/inspect_wasm.aln` and call it from `ci.core`.
 #>
 
 param(

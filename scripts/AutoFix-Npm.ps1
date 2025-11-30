@@ -1,7 +1,8 @@
 ﻿<#
-AutoFix-Npm.ps1
+Legacy: AutoFix-Npm.ps1 (local developer helper; not used by CI)
 Purpose: Automatically ensure Node.js + npm availability, then run ALN projection/validation scripts.
 Safeguards: Avoids infinite loops, provides clear exit codes, and prompts user when a new session is needed.
+Note: This script is permitted as a local helper; it MUST NOT execute in CI workflows. Consider converting essential parts to ALN modules.
 #>
 [CmdletBinding()]
 param(
