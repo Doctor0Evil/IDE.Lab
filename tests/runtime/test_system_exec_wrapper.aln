@@ -1,0 +1,115 @@
+test_suite SYSTEM_EXEC_WRAPPER_TESTS {
+
+  imports {
+    runtime_ifaces : "../../runtime/runtime_interfaces.aln"
+    policy_kernel  : "../../compliance/matrix/policy_kernel.aln"
+  }
+
+  # Smoke: allowed command (echo) succeeds, output preserved
+  test ALLOWED_ECHO_COMMAND {
+    setup:
+      opts = ExecOptions {
+        cmd_name        : "echo",
+        args            : ["hello-world"],
+        env_allowlist   : [],
+        cwd             : ".",
+        timeout_secs    : 5,
+        max_output_kb   : 16,
+        redaction_rules : []
+      }
+
+      allowed = policy_kernel.guard_exec(opts, policy_kernel.EXEC_POLICY_DEFAULT)
+      assert(allowed == true, "echo must be allowed by EXEC_POLICY_DEFAULT")
+
+    action:
+      res = exec_command(opts)
+
+    expect:
+      assert(res.exit_code == 0, "echo should succeed")
+      assert(res.stdout.contains("hello-world"), "stdout must contain echo payload")
+      assert(res.redacted_log.contains("hello-world"), "redacted_log should include non-sensitive output")
+  }
+
+  # Policy: disallowed binary is blocked before system call
+  test DISALLOWED_COMMAND_BLOCKED {
+    setup:
+      opts = ExecOptions {
+        cmd_name        : "nc",
+        args            : ["-z", "1.2.3.4", "22"],
+        env_allowlist   : [],
+        cwd             : ".",
+        timeout_secs    : 5,
+        max_output_kb   : 16,
+        redaction_rules : []
+      }
+
+      allowed = policy_kernel.guard_exec(opts, policy_kernel.EXEC_POLICY_DEFAULT)
+      assert(allowed == false, "nc must be blocked by EXEC_POLICY_DEFAULT")
+  }
+
+  # Behavior: timeout enforcement (mock/prod may simulate)
+  test TIMEOUT_ENFORCED {
+    setup:
+      opts = ExecOptions {
+        cmd_name        : "bash",
+        args            : ["-lc", "sleep 2; echo long-run"],
+        env_allowlist   : [],
+        cwd             : ".",
+        timeout_secs    : 1,
+        max_output_kb   : 16,
+        redaction_rules : []
+      }
+
+    action:
+      res = exec_command(opts)
+
+    expect:
+      assert(res.duration_ms >= 0, "duration must be reported")
+      assert(res.duration_ms <= 2000, "duration must respect timeout upper bound (approx)")
+  }
+
+  # Behavior: output truncation
+  test OUTPUT_TRUNCATION {
+    setup:
+      # Ask wrapper to generate more output than max_output_kb allows.
+      opts = ExecOptions {
+        cmd_name        : "bash",
+        args            : ["-lc", "for i in {1..500}; do printf \"line-%s\\n\" $i; done"],
+        env_allowlist   : [],
+        cwd             : ".",
+        timeout_secs    : 5,
+        max_output_kb   : 1,
+        redaction_rules : []
+      }
+
+    action:
+      res = exec_command(opts)
+
+    expect:
+      assert(res.exit_code == 0, "echo should still succeed")
+      assert(len(res.stdout) <= (1024 * opts.max_output_kb), "stdout must be truncated to max_output_kb")
+      assert(len(res.redacted_log) <= (1024 * opts.max_output_kb), "redacted_log must also be truncated")
+  }
+
+  # Behavior: redaction of obvious secrets
+  test REDACTION_OF_SECRETS {
+    setup:
+      opts = ExecOptions {
+        cmd_name        : "bash",
+        args            : ["-lc", "echo \"token=SECRET_VALUE\""],
+        env_allowlist   : [],
+        cwd             : ".",
+        timeout_secs    : 5,
+        max_output_kb   : 16,
+        redaction_rules : ["token=\\w+"]
+      }
+
+    action:
+      res = exec_command(opts)
+
+    expect:
+      assert(res.exit_code == 0, "echo should succeed")
+      assert(res.stdout.contains("token=SECRET_VALUE"), "raw stdout may contain the token")
+      assert(!res.redacted_log.contains("SECRET_VALUE"), "redacted_log must NOT leak the secret value")
+  }
+}

@@ -1,0 +1,78 @@
+# Raptor Mini Capacity Check Tool - ALN
+# Calculates VRAM envelope (T_max), latency and WORM sizing based on inputs or deployment profile
+
+imports:
+  - "../deployment/raptor_mini_capacity.aln"
+  - "../deployment/raptor_mini_qos_profile.aln"
+  - "../compliance/matrix/policy_kernel.aln"
+
+tool:
+  name: "raptor_mini_check"
+  description: "Compute T_max_Raptor, latency estimates, WORM size, and return a pass/fail policy result"
+  inputs:
+    - name: P_total
+      type: number
+    - name: b_w
+      type: number
+    - name: b_a
+      type: number
+    - name: d_model
+      type: number
+    - name: B
+      type: number
+    - name: k_act
+      type: number
+    - name: M_GPU
+      type: number
+    - name: M_other
+      type: number
+    - name: L_layers
+      type: number
+    - name: H_heads
+      type: number
+    - name: d_k
+      type: number
+    - name: G_peak
+      type: number
+    - name: eta_overhead
+      type: number
+  run:
+    - alias: t_max
+      action: "policy_kernel.compute_T_max_Raptor"
+      params:
+        P_total: "${{inputs.P_total}}"
+        b_w: "${{inputs.b_w}}"
+        b_a: "${{inputs.b_a}}"
+        d_model: "${{inputs.d_model}}"
+        B: "${{inputs.B}}"
+        k_act: "${{inputs.k_act}}"
+        M_GPU: "${{inputs.M_GPU}}"
+        M_other: "${{inputs.M_other}}"
+    - alias: latency
+      action: "policy_kernel.compute_latency_and_check"
+      params:
+        L_layers: "${{inputs.L_layers}}"
+        H_heads: "${{inputs.H_heads}}"
+        d_k: "${{inputs.d_k}}"
+        d_model: "${{inputs.d_model}}"
+        B: "${{inputs.B}}"
+        T_ctx: "${{inputs.T_ctx}}"
+        G_peak: "${{inputs.G_peak}}"
+        eta_overhead: "${{inputs.eta_overhead}}"
+    - alias: out_write
+      action: "audit.write_worm_entry"
+      params:
+        stream: "worm_local"
+        record: |
+          action: "raptor_mini_check"
+          T_max: "${{t_max.T_max}}"
+          tau_min: "${{latency.tau_min}}"
+          tau_real: "${{latency.tau_real}}"
+          valid: "${{t_max.valid && latency.valid}}"
+    - alias: final_check
+      action: "cicd.fail_if"
+      params:
+        condition: "${{not (t_max.valid && latency.valid)}}"
+        message: "Raptor Mini capacity or latency rules failed; adjust profile or reduce context"
+
+# End of tool

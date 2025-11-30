@@ -1,0 +1,36 @@
+# Runtime Attestation Gate - ALN
+# Enforces TPM/ZKP attestation checks before session or container start
+
+imports:
+  - "../../compliance/matrix/safe_resolution_matrix.aln"
+  - "../rollback/rollback_playbook.aln"
+
+hook:
+  name: "attestation_gate"
+  description: "Verify attestation for workloads; quarantine on failure"
+  run:
+    - alias: fetch_attestation_config
+      action: "file.find"
+      params:
+        path: "compliance/matrix/safe_resolution_matrix.aln"
+        selector: "modules | where(name == 'workload_attestation') | first | config"
+    - alias: attest
+      action: "runtime.attest"
+      params:
+        provider: "${{fetch_attestation_config.provider}}"
+        evidence: "${{request.attestation_evidence}}"
+    - alias: check_attestation
+      action: "cicd.fail_if"
+      params:
+        condition: "${{not attest.success}}"
+        message: "Attestation failed for workload: ${ {request.workload_name} }"
+    - alias: on_failure_quarantine
+      when: "${{not attest.success}}"
+      action: "security/rollback/rollback_playbook.aln"
+      params:
+        context:
+          trigger: "attestation_failure"
+          affected_app: "${{request.workload_name}}"
+          reason: "Non-compliant runtime attestation"
+
+# End of attestation gate

@@ -1,0 +1,19 @@
+# Docker on Windows Security - Skeleton
+info:
+  name: "docker_windows_security"
+  version: "0.1.0"
+  description: "Policy for Docker usage on Windows nodes"
+
+policies:
+  - id: image_allowlist
+    enforcement: required
+  - id: no_privileged
+    enforcement: required
+
+pipeline:
+  name: "docker_security_eval"
+  steps:
+    - action: "runtime.mock.image_scan"
+      params: { scan: true, enforce_signing: true }
+
+notes: "TODO: Add container image signing policy and CB registry integration"

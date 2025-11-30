@@ -1,0 +1,12 @@
+imports:
+  - "../../security/runner/runner_isolation.aln"
+
+tests:
+  - name: TEST_RUNNER_ISOLATION
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "security/runner/runner_isolation.aln"
+          runtime: "mock"
+      - assert: true

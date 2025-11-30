@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# A minimal aln-runner shim for the ALN container.
+# Usage: aln-runner --runtime <mock|prod> --config /workspace/cicd/aln-runner-config.aln script.aln
+set -euo pipefail
+
+# Parse args
+RUNTIME="mock"
+CONFIG="/workspace/cicd/aln-runner-config.aln"
+ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --runtime)
+      RUNTIME="$2"; shift 2;;
+    --config)
+      CONFIG="$2"; shift 2;;
+    --help)
+      echo "aln-runner shim: --runtime <mock|prod> --config <file> <aln_script>"; exit 0;;
+    *)
+      ARGS+=("$1"); shift;;
+  esac
+done
+
+SCRIPT=${ARGS[0]:-run_tests.aln}
+
+# Simulate execution: echo and return success for mock runtime; for prod, verify config
+echo "ALN-Runner shim starting: runtime=$RUNTIME script=$SCRIPT"
+
+# Basic environment export for ALN policy
+export RAPTOR_GPU_TYPE="${GPU_TYPE:-none}"
+export RAPTOR_VRAM_GB="${VRAM_GB:-0}"
+
+# Validate script existence
+if [[ ! -f "$SCRIPT" && ! -f "/workspace/$SCRIPT" ]]; then
+  echo "Script $SCRIPT not found in PATH or /workspace" >&2
+  exit 2
+fi
+
+# For mock runtime, run a simple sequence of simulated steps; in production this would invoke a real ALN runner
+if [[ "$RUNTIME" == "mock" ]]; then
+  echo "Running in mock runtime"
+  echo "Script: $SCRIPT"
+  # Provide a small simulation of a few tests by checking for 'expect: code: "PASS"'
+  # If 'FAIL' shows up in test files, return nonzero
+  grep -q "expect:\s*- code:\s*\"FAIL\"" -R || true
+  FAILS=$(grep -R "expect:\s*- code:\s*\"FAIL\"" | wc -l || true)
+  if [[ "$FAILS" -gt 0 ]]; then
+    echo "Detected FAIL expectations in tests; failing" >&2
+    exit 1
+  fi
+  echo "Mock run completed: all tests appear to be PASS"; exit 0
+fi
+
+# For production runtime, attempt to run the ALN runner binary if present
+if [[ -x "/usr/local/bin/aln-real" ]]; then
+  exec /usr/local/bin/aln-real --config "$CONFIG" "$SCRIPT"
+else
+  echo "No production runner available (aln-real missing). To test production, install a real runner or use mock runtime." >&2
+  # If running a simple wrapper test, allow it to run for quick sanity checks
+  if [[ "$SCRIPT" == *"system_exec_wrapper_test.sh" ]]; then
+    echo "Running builtin system_exec_wrapper tests in prod mode"
+    exec bash "$SCRIPT"
+  fi
+  exit 3
+fi

@@ -1,0 +1,22 @@
+imports:
+  - "../../cicd/hooks/ci_env_guard.aln"
+
+tests:
+  - name: TEST_CI_ENV_GUARD
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "cicd/hooks/ci_env_guard.aln"
+          runtime: "mock"
+      - name: exec_with_secret_in_stdout
+        action: "exec_adapter.exec_command"
+        params:
+          opts:
+            cmd_name: "powershell"
+            args: ["-Command", "Write-Output 'Secret token=sk-12345'"]
+            timeout_secs: 10
+            max_output_kb: 4
+            redaction_rules: ['token=', 'sk-[A-Za-z0-9]+']
+        output: { res: object }
+      - assert: "'***REDACTED***' in ${{exec_with_secret_in_stdout.res.redacted_log}}"

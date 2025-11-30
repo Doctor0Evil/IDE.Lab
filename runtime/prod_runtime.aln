@@ -1,0 +1,187 @@
+# Production Runtime - ALN (conceptual stubs)
+# Implements runtime_interfaces by mapping to external system commands/API calls.
+# This file contains abstract `exec` invocations; the actual ALN-runner must implement exec binding.
+
+imports:
+  - "./runtime_interfaces.aln"
+  - "../compliance/matrix/policy_kernel.aln"
+  - "../schemas/utilities/audit.aln"
+
+runtime_impl:
+  name: "prod_crypto"
+  functions:
+    - name: sha256_hex
+      impl: |
+        # Implement using native `shasum` or language binding; input is bytes
+        # Pseudo-call: exec('shasum', ['-a', '256', '--binary'])
+        return exec('sha256sum', ['-'])
+    - name: random_bytes
+      impl: |
+        return exec('openssl', ['rand', context.n])
+    - name: base64url_encode
+      impl: |
+        return exec('base64', ['-w', '0'])
+
+runtime_impl:
+  name: "prod_did_ion"
+  functions:
+    - name: did_sign
+      impl: |
+        # Delegate to HSM or Vault transit sign; keep keys out of ALN file.
+        token = env('VAULT_TOKEN') or ''
+        # Example: call `vault` CLI for transit sign; real runner must replace with secure call
+        return exec('vault', ['write', '-field=sig', 'transit/sign/ide-lab', 'input=' + context.payload])
+    - name: did_verify_signature
+      impl: |
+        # Verify signature by resolving DID doc and verifying signature with public key; call runtime verifier
+        return exec('did-verify', ['--did', context.did, '--payload', context.payload, '--sig', context.signature])
+    - name: resolve_did_document
+      impl: |
+        return exec('did-resolve', ['--did', context.did])
+
+runtime_impl:
+  name: "prod_file_ops"
+  functions:
+    - name: file_read
+      impl: |
+        return exec('cat', [context.path])
+    - name: file_write_atomic
+      impl: |
+        # Write to tmp file then rename (atomic on posix)
+        tmp = context.path + '.tmp'
+        exec('bash', ['-c', 'cat > ' + tmp])
+        exec('mv', [tmp, context.path])
+        return true
+    - name: file_lock
+      impl: |
+        # Acquire OS-level lock, e.g., flock
+        return exec('flock', ['-n', context.path])
+
+runtime_impl:
+  name: "prod_audit"
+  functions:
+    - name: write_worm_entry
+      impl: |
+        # Send JSON to an append-only WORM backend (S3 object lock or vendor WORM)
+        payload_json = json.encode(context.record)
+        # Example: aws s3 cp - --bucket worm-bucket --key worm/$(date).json --metadata tag=...  (runner provides auth)
+        return exec('aws', ['s3', 'cp', '-', 's3://worm-bucket/' + context.stream + '/' + str(now()) + '.json'], input: payload_json)
+
+runtime_impl:
+  name: "prod_vault"
+  functions:
+    - name: vault_issue_token
+      impl: |
+        # Use vault CLI or https calls with AppRole/OIDC
+        # Return token handle (opaque) and never print secret information
+        return exec('vault', ['token', 'create', '-format=json'])
+    - name: vault_revoke_token
+      impl: |
+        return exec('vault', ['token', 'revoke', context.token_handle])
+
+runtime_impl:
+  name: "prod_host"
+  functions:
+    - name: host_get_facts
+      impl: |
+        # Use platform-specific tools to collect host facts; Windows uses PowerShell/WinRM; Linux use uname, systemctl, dmidecode
+        if os == 'windows':
+          return exec('powershell', ['-NoProfile', '-Command', 'Get-ComputerInfo | ConvertTo-Json'])
+        else:
+          return exec('bash', ['-c', 'echo "$(uname -a)"'])
+    - name: host_get_windows_events
+      impl: |
+        # Call powershell Get-WinEvent, respecting time range and filters in Query
+        return exec('powershell', ['-NoProfile', '-Command', 'Get-WinEvent -FilterHashtable @{LogName="Security";ID=@(4624,4625)} | ConvertTo-Json'])
+
+runtime_impl:
+  name: "prod_k8s"
+  functions:
+    - name: k8s_get_nodes
+      impl: |
+        # Use kubectl with configured kubeconfig or client libraries
+        return exec('kubectl', ['get', 'nodes', '-o', 'json'])
+    - name: k8s_get_network_policies
+      impl: |
+        return exec('kubectl', ['get', 'networkpolicies', '-A', '-o', 'json'])
+
+runtime_impl:
+  name: "exec_adapter"
+  functions:
+    - name: system_exec
+      impl: "runtime"
+
+runtime_impl:
+  name: "prod_github"
+  functions:
+    - name: gh_get_org_settings
+      impl: |
+        # Use `gh` CLI or a curl to GitHub API with a token in env GITHUB_TOKEN
+        return exec('gh', ['api', '/orgs/' + context.org + '/security-constraints'])
+    - name: gh_get_repo_settings
+    - name: issue_short_lived_token
+        # Call GitHub API for branch protection and settings
+        return exec('gh', ['api', '/repos/' + context.owner + '/' + context.repo + '/branches'])
+
+runtime_impl:
+  name: "prod_ci"
+  functions:
+    - name: ci_get_env
+    - name: revoke_secret
+        # Return CI env vars in a safe manner; do not leak secrets
+        return { 'GITHUB_REF': env('GITHUB_REF', ''), 'GITHUB_RUN_ID': env('GITHUB_RUN_ID', '') }
+    - name: inject_runtime_secret
+      impl: |
+        # Return an opaque secret handle; do not echo secret value
+        return exec('vault', ['kv', 'get', '-format=json', context.secret_path])
+    - name: rotate_secret
+      impl: |
+        return exec('vault', ['kv', 'rotate', context.secret_path])
+    - name: ci_get_job_metadata
+      impl: |
+        return { 'job': env('GITHUB_JOB', ''), 'actor': env('GITHUB_ACTOR', '') }
+
+  - name: exec_command
+    impl: |
+      opts = context.opts or {}
+      # Demote missing fields to defaults
+      opts.timeout_secs = opts.timeout_secs or 60
+      opts.max_output_kb = opts.max_output_kb or 256
+      # Ensure policy guard
+      guard = policy_kernel.guard_exec(opts, policy_kernel.EXEC_POLICY_DEFAULT)
+      if not guard.allowed:
+        return { exit_code: 1, stdout: '', stderr: 'exec blocked by policy: ' + guard.reason, redacted_log: 'blocked', duration_ms: 0 }
+
+      # Call runtime-provided system_exec binding
+      res = system_exec(opts)
+
+      # Apply redaction rules
+      res.redacted_log = apply_redaction(res.stdout or '', res.stderr or '', opts.redaction_rules or [])
+
+      # Audit exec call
+      try:
+        audit.write_exec_audit("worm_local", opts, res)
+      except:
+        # Do not leak secrets; ensure audit failure does not leak tokens
+        pass
+      return res
+
+  - name: apply_redaction
+    impl: |
+      stdout = context.stdout or ''
+      stderr = context.stderr or ''
+      rules = context.rules or []
+      combined = stdout + '\n' + stderr
+      for p in rules:
+        try:
+          combined = re.sub(p, '***REDACTED***', combined)
+        except:
+          # invalid regex; ignore
+          combined = combined
+      return combined
+
+# Notes:
+# - `exec` calls above are abstracted pseudocode; concrete implementations in runner should bind
+#   `exec` to system process execution with proper authentication and token handling.
+# - All token and secrets use `env('VAR_NAME')` and should not be printed or logged.
+# - For Windows, `exec('powershell')` calls must use secure credentials (WinRM or local privileged process) and follow telemetry/PII policies.

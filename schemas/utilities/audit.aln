@@ -1,0 +1,35 @@
+# Audit utilities - ALN
+# Defines WORM audit interface for writing immutable logs
+
+exports:
+  - name: write_worm_entry
+    params:
+      - name: stream
+        type: string
+      - name: record
+        type: object
+    returns: boolean
+    impl: "runtime"
+    description: "Write a WORM audit entry; runtime must ensure immutability and.encrypt as needed"
+  - name: write_security_summary
+    params:
+      - name: stream
+        type: string
+      - name: summary
+        type: object
+    returns: boolean
+    impl: "runtime"
+    description: "Write a condensed security summary to WORM including policy version and aggregated results"
+  - name: write_exec_audit
+    params:
+      - name: stream
+        type: string
+      - name: opts
+        type: object
+      - name: res
+        type: object
+    returns: boolean
+    impl: "runtime"
+    description: "Write an audit entry for an exec call to WORM"
+
+# End of audit utilities

@@ -1,0 +1,33 @@
+# DPIA-aligned Incident Checklist - ALN
+# Links rollback actions to privacy/compliance controls (logging, access restriction, data minimization)
+
+checklist:
+  name: "incident_checklist"
+  items:
+    - id: "revoke_tokens"
+      action: "Revoke short-lived tokens for impacted artifacts"
+      controls:
+        - "Log revocation for WORM audit"
+        - "Restrict access to administrative roles"
+    - id: "disable_cicd"
+      action: "Disable CI/CD deployment gates"
+      controls:
+        - "Retain artifacts in quarantine, disable publish to registries"
+        - "Enable stricter access control for pipeline re-enablement"
+    - id: "quarantine_workload"
+      action: "Quarantine or block workloads"
+      controls:
+        - "Remove network egress for quarantine sessions"
+        - "Suspend backup/replication to minimize data spread"
+    - id: "notify_roles"
+      action: "Notify SecOps and Release via DID channels"
+      controls:
+        - "Provide secure DID messages; do not include PII in notifications"
+        - "Require acknowledgement and confirmation in WORM log"
+    - id: "forensic_capture"
+      action: "Capture forensic evidence for DPIA investigations"
+      controls:
+        - "Collect minimal PII required for legal investigation"
+        - "Encrypt and store evidence in WORM storage"
+
+# End of incident checklist

@@ -1,0 +1,29 @@
+# Windows Node Security for Kubernetes - Skeleton
+info:
+  name: "windows_node_security"
+  version: "0.1.0"
+  description: "Node policy for Windows nodes in K8s clusters"
+
+enums:
+  - name: secrecy: [private, confidential, public]
+
+structs:
+  - name: NodeSecurityConfig
+    fields:
+      - name: node_name
+        type: string
+      - name: ntfs_acl_enforced
+        type: boolean
+      - name: bitlocker_enabled
+        type: boolean
+      - name: host_protection
+        type: string
+
+pipeline:
+  name: "node_security_check"
+  steps:
+    - action: "runtime.mock.node_check"
+      params: {name: "node_security_check", config: NodeSecurityConfig}
+
+notes: |
+  TODO: Integrate with Vault agent and admission controller checks.

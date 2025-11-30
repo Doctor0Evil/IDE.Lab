@@ -1,0 +1,19 @@
+# IDE.Lab Virtual Cluster Profile - Skeleton
+info:
+  name: "ide_lab_cluster_profile"
+  version: "0.1.0"
+  description: "Define allowed cluster node types, OS versions, GPU SKUs and security addons"
+
+profiles:
+  - id: raptor_mini
+    os: ["Windows-2022","Ubuntu-22.04"]
+    gpu_skus: ["NVIDIA-A30", "NVIDIA-A10"]
+    security_addons: ["TPM","BitLocker","VaultAgent"]
+
+pipeline:
+  name: "validate_cluster_profile"
+  steps:
+    - action: "runtime.mock.cluster_profile_check"
+      params: { profile: "raptor_mini", node_types: ["vm_scale_set"] }
+
+notes: "TODO: Add schema validation and allowed SKUs retrieval"

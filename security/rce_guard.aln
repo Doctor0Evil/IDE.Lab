@@ -1,0 +1,21 @@
+# RCE Guard - Skeleton
+info:
+  name: "rce_guard"
+  version: "0.1.0"
+  description: "Detect remote code execution patterns and prevent deployment"
+
+rules:
+  - id: powershell_download_exec
+    description: "Block PowerShell scripts that download & execute code"
+    enforcement: required
+  - id: wmi_exec
+    description: "Flag WMI-based code execution patterns"
+    enforcement: required
+
+pipeline:
+  name: "rce_detection"
+  steps:
+    - action: "runtime.mock.pattern_check"
+      params: { patterns: ["download-exec","Invoke-Expression"] }
+
+notes: "TODO: Add static analysis for PS scripts and detection rules"

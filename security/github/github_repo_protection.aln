@@ -1,0 +1,20 @@
+# GitHub Repo Protection - Skeleton
+info:
+  name: "github_repo_protection"
+  version: "0.1.0"
+
+fields:
+  - name: repo
+    type: string
+  - name: branch_protection_enabled
+    type: boolean
+  - name: required_checks
+    type: array
+
+pipeline:
+  name: "repo_protection_eval"
+  steps:
+    - action: "runtime.mock.github_repo_check"
+      params: { required_checks: ["validate_safe_resolution", "security_automation_suite"] }
+
+notes: "TODO: Add codeowners and protection enforcement via GitHub API"

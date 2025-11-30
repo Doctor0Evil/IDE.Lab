@@ -1,4 +1,5 @@
 ![ALN Compliance Charter](https://img.shields.io/badge/ALN%20Compliance-Enforced-brightgreen)
+![ALN Compliance - Compliance Guardian](https://github.com/Doctor0Evil/IDE.Lab/actions/workflows/compliance_guardian.yml/badge.svg)
 ![KYC/DID Verified](https://img.shields.io/badge/KYC%20Verified-DID%20Required-blue)
 ![Immutable Ledger](https://img.shields.io/badge/Ledger-Blockchain%20Secured-orange)
 ![Audit-Ready](https://img.shields.io/badge/Audit-Continuous%20Monitoring-yellow)
@@ -87,6 +88,13 @@ pwsh -File scripts/Inspect-Wasm.ps1 -WasmPath build/module.wasm
 Prebuilt GitHub Actions workflows automate critical validation steps including:
 
 - ALN core language validation and restrictions on Python usage (`aln-ci-core.yml`).
+Branch protection & status checks
+- After you run the `compliance_guardian` workflow at least once on `main`, add status checks to branch protection to require the following:
+  - `safe-resolution-validate` (job in `compliance_guardian`)
+  - `security-suite` (job in `compliance_guardian`)
+  - Any additional CI checks you rely on (unit tests, code scan, etc.)
+
+This will ensure the SAFE_RESOLUTION matrix and the security automation suite are enforced via GitHub before merges.
 - Hardware simulation matrix validation for device twin firmware (`aln-device-twin-ci.yml`).
 - Virtual machine bootstrap validation (`aln-vm-bootstrap-validate.yml`).
 - Repository policy and Copilot metaprompt governance (`aln-copilot-governance.yml`).
@@ -162,6 +170,26 @@ aln deps sync
 aln lint
 aln test
 aln run ci.core
+```
+
+## Containerized ALN Runner (Local Usage)
+
+You can build a containerized ALN runner that uses the repo's ALN files and mock runtime for local validation. Example:
+
+```bash
+docker build -f docker/Dockerfile.aln-runner -t aln-runner:local .
+docker run --rm -e ALN_RUNTIME=mock -e GPU_TYPE=none -e VRAM_GB=8 aln-runner:local run_tests.aln
+docker run --rm -e ALN_RUNTIME=mock -e GPU_TYPE=none -e VRAM_GB=8 aln-runner:local validate_safe_resolution_matrix.aln
+docker run --rm -e ALN_RUNTIME=mock -e GPU_TYPE=pro -e VRAM_GB=24 aln-runner:local raptor_mini_check.aln
+
+To test the `system_exec` binding in a staged `prod` context using the wrapper, run:
+```bash
+docker run --rm -e ALN_RUNTIME=prod aln-runner:local tests/runtime/system_exec_wrapper_test.sh
+```
+See `docs/system_exec_adapter.md` for details on integration and hardening.
+```
+
+This builds the `aln-runner` container image and runs the test harness, SAFE_RESOLUTION validation, and Raptor capacity check in sequence.
 ```
 
 For more, explore GitHub's built-in collaboration features, advanced security integrations, and automation tools that support agile, secure development and deployment [GitHub Overview].[14][15][17]

@@ -1,0 +1,19 @@
+# Windows Logon Policy - Skeleton
+info:
+  name: "windows_logon_policy"
+  version: "0.1.0"
+  description: "Enforce JIT local admin and secure UAC prompts"
+
+policies:
+  - id: jit_admin
+    enforcement: required
+  - id: credential_guard
+    enforcement: required
+
+pipeline:
+  name: "windows_logon_eval"
+  steps:
+    - action: "runtime.mock.logon_check"
+      params: { require_jit: true, require_credential_guard: true }
+
+notes: "TODO: Add integration with AD/GPO queries"

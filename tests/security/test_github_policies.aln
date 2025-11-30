@@ -1,0 +1,40 @@
+# Minimal GitHub policy tests
+imports:
+  - "../../security/github/github_org_security.aln"
+  - "../../security/github/github_repo_protection.aln"
+
+tests:
+  - name: TEST_GITHUB_POLICIES
+    description: "Simulate GitHub org and repo configs for compliance checks"
+    run:
+      - step: "setup_org_compliant"
+        action: "runtime.mock.create_org"
+        params: { sso_enabled: true, 2fa_required: true }
+      - step: "check_org_compliant"
+        action: "runtime.mock.eval"
+        params:
+          policy: "org_security_eval"
+          org_config: "${{setup_org_compliant.org}}"
+      - assert: "${{check_org_compliant.valid}} == true"
+
+      - step: "setup_org_bad"
+        action: "runtime.mock.create_org"
+        params: { sso_enabled: false, 2fa_required: false }
+      - step: "check_org_bad"
+        action: "runtime.mock.eval"
+        params:
+          policy: "org_security_eval"
+          org_config: "${{setup_org_bad.org}}"
+      - assert: "${{check_org_bad.valid}} == false"
+
+      - step: "setup_repo_bad"
+        action: "runtime.mock.create_repo"
+        params: { branch_protection_enabled: false, required_checks: [] }
+      - step: "check_repo_bad"
+        action: "runtime.mock.eval"
+        params:
+          policy: "repo_protection_eval"
+          repo_config: "${{setup_repo_bad.repo}}"
+      - assert: "${{check_repo_bad.valid}} == false"
+
+notes: "TODO: Add tests with code owners and signed commits enforcement"

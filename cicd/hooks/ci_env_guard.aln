@@ -1,0 +1,21 @@
+# CI Environment Guard - Skeleton
+info:
+  name: "ci_env_guard"
+  version: "0.1.0"
+  description: "Rules to ensure environment variables in CI do not leak secrets"
+
+rules:
+  - id: no_plaintext_secrets
+    enforcement: required
+    description: "Prevent echoing/printing raw secret values"
+  - id: env_allowlist
+    enforcement: required
+    description: "Only allow the configured env var keys for ALN runtime"
+
+pipeline:
+  name: "ci_env_eval"
+  steps:
+    - action: "runtime.mock.check_env"
+      params: { allowed: ["ALN_RUNTIME","GPU_TYPE","VRAM_GB","VAULT_TOKEN"] }
+
+notes: "TODO: integrate with GitHub Actions mask and Secrets scanning"

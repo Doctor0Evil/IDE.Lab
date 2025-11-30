@@ -1,0 +1,56 @@
+# Rollback Playbook - ALN
+# Defines triggers, actions, and logging to WORM for DPIA-compliant investigations
+
+playbook:
+  name: "rollback_playbook"
+  description: "Actions to execute if security events occur (quarantine, block, matrix integrity breach, secret misuse)"
+
+triggers:
+  - matrix_integrity_breach
+  - secret_misuse_detected
+  - quarantine
+  - block
+  - security_ruleset_block
+  - attestation_failure
+
+actions:
+  - name: revoke_tokens
+    description: "Revoke all active tokens associated with the impacted application or secrets"
+    steps:
+      - action: "secrets.integrations.hashicorp_vault_bridge.revoke_secret"
+        params:
+          token_handle: "${{context.token_handle}}"
+  - name: disable_cicd_deployments
+    description: "Disable deployment gates or pause pipelines"
+    steps:
+      - action: "cicd.disable_pipeline"
+        params:
+          pipeline: "build_and_test"
+  - name: isolate_workloads
+    description: "Quarantine or block runtime workloads"
+    steps:
+      - action: "runtime.quarantine"
+        params:
+          scope: "${{context.affected_app}}"
+  - name: notify_roles
+    description: "Notify SecOps and Release roles via DID channels"
+    steps:
+      - action: "rpc.send_did_message"
+        params:
+          dids: ["${{roles.secops.did}}","${{roles.release.did}}"]
+          subject: "Incident: ${ {context.trigger} }"
+          body: "Rollback executed: see WORM logs for details"
+  - name: log_rollback_step
+    description: "Write each rollback step into WORM audit storage"
+    steps:
+      - action: "audit.write_worm_entry"
+        params:
+          stream: "worm_local"
+          record: |
+            action: "rollback"
+            status: "${{context.status}}"
+            reason: "${{context.reason}}"
+            steps_executed: "${{context.executed_steps}}"
+            timestamp: "${{now}}"
+
+# End of Playbook

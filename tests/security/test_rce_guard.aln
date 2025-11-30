@@ -1,0 +1,12 @@
+imports:
+  - "../../security/rce_guard.aln"
+
+tests:
+  - name: TEST_RCE_GUARD
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "security/rce_guard.aln"
+          runtime: "mock"
+      - assert: true

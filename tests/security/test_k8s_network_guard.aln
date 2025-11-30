@@ -1,0 +1,12 @@
+imports:
+  - "../../security/cluster/k8s_network_guard.aln"
+
+tests:
+  - name: TEST_K8S_NETWORK_GUARD
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "security/cluster/k8s_network_guard.aln"
+          runtime: "mock"
+      - assert: true

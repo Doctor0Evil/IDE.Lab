@@ -1,0 +1,151 @@
+# Validation engine for SAFE_RESOLUTION - ALN
+# Provides reusable validation functions for matrix header, hash, signature, and schema verification
+
+imports:
+  - "./safe_resolution_schema.aln"
+  - "../utilities/crypto.aln"
+  - "../utilities/did_ion_bridge.aln"
+
+functions:
+  - name: validate_matrix_header
+    params:
+      - name: meta
+        type: object
+      - name: required_legal_refs
+        type: array
+      - name: expected_author_did
+        type: string
+      - name: expected_version
+        type: string
+    returns: object
+    body: |
+      # Validate presence and correctness of header fields
+      errors: []
+      if not meta.version or meta.version != expected_version:
+        errors += [{code: "VERSION_MISMATCH", message: "Version mismatch", found: meta.version, expected: expected_version}]
+      if not meta.author_did or meta.author_did != expected_author_did:
+        errors += [{code: "AUTHOR_DID_MISMATCH", message: "Author DID mismatch", found: meta.author_did, expected: expected_author_did}]
+      missing_refs = [r for r in required_legal_refs if r not in (meta.legal_refs or [])]
+      if len(missing_refs) > 0:
+        errors += [{code: "MISSING_LEGAL_REFS", message: "Missing legal references", missing: missing_refs}]
+      return {valid: len(errors) == 0, errors: errors}
+
+  - name: validate_matrix_hash
+    params:
+      - name: body_segment
+        type: string
+      - name: trailer_sha256
+        type: string
+    returns: object
+    body: |
+      computed = crypto.sha256_hex(body_segment)
+      if computed != trailer_sha256:
+        return {valid: false, code: "HASH_MISMATCH", computed: computed, provided: trailer_sha256}
+      return {valid: true, code: "HASH_OK"}
+
+  - name: validate_signature
+    params:
+      - name: did
+        type: string
+      - name: payload_hash
+        type: string
+      - name: signature
+        type: string
+    returns: object
+    body: |
+      # DID Engine verifies that the signature corresponds to the payload hash and DID public key
+      did_doc = did_ion_bridge.resolve_did_document(did)
+      if not did_doc:
+        return {valid: false, code: "DID_RESOLUTION_FAILED"}
+      can_sign = did_ion_bridge.did_can_sign(did)
+      if not can_sign:
+        return {valid: false, code: "DID_CANNOT_SIGN"}
+      payload_b64 = crypto.hex_to_base64(payload_hash)
+      ok = crypto.did_verify_signature(did, payload_b64, signature)
+      if not ok:
+        return {valid: false, code: "SIGNATURE_INVALID"}
+      return {valid: true, code: "SIGNATURE_OK"}
+
+  - name: validate_modules_against_schema
+    params:
+      - name: matrix_doc
+        type: object
+      - name: schema_doc
+        type: object
+    returns: object
+    body: |
+      errors: []
+      # Validate modules array items against ModuleConfig struct
+      modules = matrix_doc.modules or []
+      if len(modules) == 0:
+        errors += [{code: "NO_MODULES", message: "No modules declared"}]
+      for m in modules:
+        if not m.name:
+          errors += [{code: "MODULE_NAME_MISSING", module: m}]
+        # enforcement must be one of enum
+        if m.config and m.config.enforcement not in schema_doc.enums.enforcement:
+          errors += [{code: "INVALID_ENFORCEMENT", module: m.name, found: m.config.enforcement}]
+        # hooks must be non-empty if present
+        if m.config and m.config.hooks and len(m.config.hooks) == 0:
+          errors += [{code: "EMPTY_HOOKS", module: m.name}]
+        # Additional module specific checks
+        if m.name == 'sealed_secret_vault':
+          vault_check = validate_sealed_secret_vault_config(m)
+          if not vault_check.valid:
+            errors += vault_check.errors
+      return {valid: len(errors) == 0, errors: errors}
+
+  - name: validate_no_plaintext_secrets
+    params:
+      - name: matrix_doc
+        type: object
+    returns: object
+    body: |
+      errors: []
+      # Scan module configs for common plaintext secret indicators
+      for m in (matrix_doc.modules or []):
+        if m.config and m.config.get('secrets'):
+          errors += [{code: "PLAINTEXT_SECRETS_FOUND", module: m.name, details: "secrets configured in cleartext"}]
+        # Check for any fields named token, password, key that are strings that look like secrets
+        for k, v in (m.config or {}).items():
+          if k in ['token','password','key','secret'] and isinstance(v, str) and len(v) > 0:
+            errors += [{code: "PLAINTEXT_SECRET_FIELD", module: m.name, field: k}]
+      return {valid: len(errors) == 0, errors: errors}
+
+  - name: validate_field_formats
+    params:
+      - name: matrix_doc
++        type: object
+    returns: object
+    body: |
+      errors: []
+      # Enforce field regexes for SHA256 and DID
+      did_pattern = "^did:ion:[A-Za-z0-9_-]{4,}$"
+      sha_pattern = "^[A-Fa-f0-9]{64}$"
+      meta = matrix_doc
+      if not re.match(did_pattern, meta.author_did):
+        errors += [{code: "INVALID_DID_FORMAT", found: meta.author_did}]
+      if not re.match(sha_pattern, meta.trailer.SHA256_Matrix):
+        errors += [{code: "INVALID_SHA_FORMAT", found: meta.trailer.SHA256_Matrix}]
+      return {valid: len(errors) == 0, errors: errors}
+
+  - name: validate_sealed_secret_vault_config
+    params:
+      - name: module_doc
+        type: object
+    returns: object
+    body: |
+      errors: []
+      if not module_doc or module_doc.name != 'sealed_secret_vault':
+        return {valid: true, errors: []}
+      cfg = module_doc.config or {}
+      if cfg.backend != 'hashicorp_vault':
+        errors += [{code: 'INVALID_VAULT_BACKEND', message: 'secrets backend must be hashicorp_vault', found: cfg.backend}]
+      if not cfg.vault_backend or not cfg.vault_backend.get('path'):
+        errors += [{code: 'MISSING_VAULT_PATH', message: 'vault_backend.path required'}]
+      # Ensure issuance TTL is reasonable
+      if cfg.get('issuance') and cfg.issuance.get('ttl') and cfg.issuance.ttl <= 0:
+        errors += [{code: 'INVALID_ISSUANCE_TTL', message: 'issuance.ttl must be positive'}]
+      return {valid: len(errors) == 0, errors: errors}
+
+# End of validation engine

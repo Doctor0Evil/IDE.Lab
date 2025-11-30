@@ -1,0 +1,71 @@
+# Build and Test Pipeline - ALN
+# Gate: VALIDATE_SAFE_RESOLUTION_MATRIX must pass before build and test stages
+
+pipeline:
+  name: "build_and_test"
+  triggers:
+    - event: pull_request
+    - event: push
+
+  stages:
+    - name: validate_matrix
+      description: "Validate SAFE_RESOLUTION matrix before executing build and tests"
+      run:
+        - action: "../hooks/validate_safe_resolution_matrix.aln"
+
+    - name: security_scan
+      description: "Static security scanning according to security_ruleset"
+      run:
+        - alias: scan
+          action: "../security/security_ruleset.aln"
+        - alias: check_violations
+          action: "cicd.eval"
+          params:
+            expression: "${{ scan.violations | filter(v -> v.severity == 'critical') | length > 0 }}"
+        - alias: on_critical
+          when: "${{check_violations}}"
+          action: "../security/rollback/rollback_playbook.aln"
+          params:
+            context:
+              trigger: "security_scan_violation"
+              reason: "critical_violation_detected"
+
+    - name: build
+      description: "Compile and build artifacts"
+      run:
+        - action: "../hooks/secret_injection.aln"
+        - action: "msbuild"
+          args: ["/t:build"]
+
+    - name: test
+      description: "Run unit and integration tests"
+      run:
+        - action: "dotnet test"
+
+    - name: security_suite
+      description: "Run the Security Automation Suite as a pre-publish test"
+      run:
+        - action: "../hooks/security_automation_suite.aln"
+
+
+  failure_modes:
+    - name: matrix_header_mismatch
+      code: 1001
+      message: "Matrix header mismatch: version/author/legal_references"
+    - name: matrix_hash_mismatch
+      code: 1002
+      message: "Matrix body SHA256 hash mismatch"
+    - name: matrix_schema_violation
+      code: 1003
+      message: "Schema violation in SAFE_RESOLUTION matrix"
+    - name: matrix_signature_failure
+      code: 1004
+      message: "Author signature verification failed for SAFE_RESOLUTION matrix"
+    - name: security_violation_block
+      code: 2001
+      message: "Security rule violation: block and possible rollback"
+    - name: secret_injection_failure
+      code: 2002
+      message: "Secret injection or Vault error"
+
+# End of pipeline

@@ -1,0 +1,17 @@
+# Run PROD runtime binding tests in a controlled environment
+imports:
+  - "./test_prod_runtime_bindings.aln"
+
+runner:
+  name: "prod_runtime_test_runner"
+  run:
+    - action: "tests.execute"
+      params:
+        files:
+          - "tests/runtime/test_prod_runtime_bindings.aln"
+          - "tests/runtime/test_system_exec_wrapper.aln"
+        runtime: "prod"
+    - action: "audit.write_worm_entry"
+      params:
+        stream: "worm_local"
+        record: { action: 'prod_runtime_test', status: 'completed', timestamp: now() }

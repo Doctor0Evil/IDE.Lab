@@ -1,0 +1,55 @@
+# Raptor Mini capacity profile - ALN
+# This file captures GPU capacity, quantization, and context parameters used by IDE.Lab
+
+profile:
+  name: "raptor_mini_capacity_profile"
+  description: "Defines chosen quantization, sparsity, batch size, max context, and KV-cache policy for Raptor Mini deployments"
+  parameters:
+    - name: b_w
+      value: 8
+      description: "Bits per weight (quantization)"
+    - name: b_a
+      value: 16
+      description: "Bits per activation"
+    - name: s
+      value: 0.2
+      description: "Overall parameter sparsity"
+    - name: B
+      value: 1
+      description: "Batch size"
+    - name: T_ctx_max
+      value: 200000
+      description: "Max context tokens per request"
+    - name: d_model
+      value: 4096
+      description: "Model hidden dimension - adjust for your Raptor Mini weights"
+    - name: P_total
+      value: 22000000000
+      description: "Total params - example 22B"
+    - name: M_GPU_GB
+      value: 48
+      description: "GPU VRAM"
+    - name: M_other_GB
+      value: 4
+      description: "VRAM reserved for OS and other workloads"
+    - name: k_act
+      value: 4
+      description: "Activation constant"
+
+  derived:
+    - name: M_weights_GB
+      expr: "P_total * b_w / (8 * 1024^3)"
+    - name: M_act_GB
+      expr: "k_act * B * T_ctx_max * d_model * b_a / (8 * 1024^3)"
+    - name: M_free_GB
+      expr: "M_GPU_GB - M_other_GB"
+
+  constraints:
+    - expr: "M_weights_GB + M_act_GB <= M_free_GB"
+    - expr: "T_ctx_max <= 200000"
+
+  recommendations:
+    - "If the constraint is violated, consider reducing T_ctx_max, b_w, or s (increase sparsity)"
+    - "Use KV-cache to accelerate multi-step interactions where n_step is large"
+
+# End of capacity profile

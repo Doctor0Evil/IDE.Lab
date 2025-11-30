@@ -1,0 +1,38 @@
+# Windows Hardening Policy - Skeleton
+info:
+  name: "windows_hardening"
+  version: "0.1.0"
+  description: "Windows baseline hardening policy definitions for SAFE_RESOLUTION"
+
+types:
+  - name: Control
+    fields:
+      - name: id
+        type: string
+      - name: description
+        type: string
+      - name: required
+        type: boolean
+
+controls:
+  - id: "UAC"
+    description: "User Account Control configured with secure desktop"
+    required: true
+  - id: "BitLocker"
+    description: "BitLocker enabled for VM and node volumes"
+    required: true
+  - id: "ASLR"
+    description: "Address space layout randomization enforced"
+    required: true
+
+pipelines:
+  - name: "windows_hardening_check"
+    description: "Minimal check for Windows hardening baseline for CI mock runtime"
+    steps:
+      - action: "runtime.mock.check_windows"
+        params:
+          controls: ["UAC","BitLocker","ASLR"]
+        output: {valid: boolean, details: map}
+
+notes: |
+  TODO: Add GPO/RBAC checks and concrete registry/file checks per control.

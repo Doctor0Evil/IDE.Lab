@@ -1,0 +1,21 @@
+# Windows Agent Guard - Skeleton
+info:
+  name: "windows_agent_guard"
+  version: "0.1.0"
+  description: "Policy for Windows self-hosted runner agents"
+
+fields:
+  - name: agent_id
+    type: string
+  - name: patch_level_days
+    type: number
+  - name: am_status
+    type: boolean
+
+pipeline:
+  name: "run_agent_guard"
+  steps:
+    - action: "runtime.mock.agent_check"
+      params: { require_patch_recency_days: 7, require_am_enabled: true }
+
+notes: "TODO: Add auto-remediation for outdated agents"

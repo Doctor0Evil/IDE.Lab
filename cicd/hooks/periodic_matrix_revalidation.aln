@@ -1,0 +1,27 @@
+# Periodic Matrix Revalidation - ALN
+# Scheduled job to revalidate SAFE_RESOLUTION matrix daily and report to SecOps
+
+imports:
+  - "../../cicd/hooks/validate_safe_resolution_matrix.aln"
+  - "../../schemas/utilities/audit.aln"
+
+workflow:
+  name: "periodic_matrix_revalidation"
+  schedule: "0 0 * * *" # daily at midnight UTC
+  run:
+    - action: "../hooks/validate_safe_resolution_matrix.aln"
+    - alias: on_failure_notify
+      when: "${{not (validate_matrix.valid)}}"
+      action: "rpc.send_did_message"
+      params:
+        dids: ["did:ion:secops1","did:ion:release1"]
+        subject: "SAFE_RESOLUTION Matrix revalidation failure"
+        body: "Matrix has drift or tampering detected. See WORM logs and remediation steps."
+    - alias: write_audit
+      action: "audit.write_worm_entry"
+      params:
+        stream: "worm_local"
+        record: |
+          action: "periodic_matrix_revalidation"
+          status: "${{if(validate_matrix.valid) then 'ok' else 'fail'}}"
+          timestamp: "${{now}}"

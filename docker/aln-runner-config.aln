@@ -1,0 +1,16 @@
+# aln-runner-config.aln - ALN runtime profile mapping
+# profile: mock -> uses internal mock_runtime ALN; prod -> external runtime mapping (vault, did, audit, file_ops)
+
+profiles:
+  - name: mock
+    description: "Map ALN functions to the mock runtime distribution included in the repo"
+    runtime:
+      - module: "schemas/utilities/mock_runtime.aln"
+        bind_all: true
+  - name: prod
+    description: "Map ALN functions to production bindings; runtime should provide secure implementations for production use"
+    runtime:
+      - module: "runtime/prod_runtime.aln"
+        impl: "runtime"
+
+# End of config

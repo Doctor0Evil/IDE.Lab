@@ -1,0 +1,51 @@
+# DID ION Bridge - ALN
+# Thin ALN interface for DID resolution & key checks for did:ion method
+
+imports:
+  - "./crypto.aln"
+
+types:
+  - name: DID_DOC
+    type: object
+    description: "Minimal DID Document structure relevant for signing verification"
+    schema:
+      - name: id
+        type: string
+        required: true
+      - name: controller
+        type: string
+        required: false
+      - name: verificationMethod
+        type: array
+        required: true
+        minItems: 1
+      - name: assertionMethod
+        type: array
+        required: false
+
+exports:
+  - name: resolve_did_document
+    params:
+      - name: did
+        type: string
+    returns: DID_DOC
+    impl: "runtime"
+    description: "Resolve a DID document; runtime will call ION resolver or cache"
+
+  - name: did_can_sign
+    params:
+      - name: did
+        type: string
+    returns: boolean
+    impl: "runtime"
+    description: "Return true if the DID's verification method supports signing"
+
+  - name: did_get_key_id
+    params:
+      - name: did
+        type: string
+    returns: string
+    impl: "runtime"
+    description: "Return key id (verification method id) used for signing operations"
+
+# End of DID ION bridge

@@ -1,0 +1,204 @@
+# Safe Resolution Schema - ALN
+# Typed structs and constraints for SAFE_RESOLUTION matrix
+
+schemas:
+  types:
+    - name: "Version"
+      type: string
+      pattern: "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" # SemVer MAJOR.MINOR.PATCH
+    - name: "SHA256"
+      type: string
+      pattern: "^[A-Fa-f0-9]{64}$" # 64 hex characters
+    - name: "DID"
+      type: string
+      pattern: "^did:ion:[A-Za-z0-9_-]{4,}$" # Basic did:ion pattern
+
+  enums:
+    enforcement:
+      - optional
+      - required
+    hooks:
+      - validate_matrix
+      - audit
+      - rollback
+      - secret_injection
+      - quarantine
+      - block
+      - alert
+    backends:
+      - hashicorp_vault
+      - ssh
+      - tpm
+    methods:
+      - periodic
+      - manual
+      - hook-driven
+    storage:
+      - worm
+      - ephemeral
+    export_format:
+      - jsonl
+      - json
+    compliance:
+      - gdpr
+      - dpia
+      - iso27001
+
+  structs:
+    - name: ModuleConfig
+      fields:
+        - name: name
+          type: string
+          required: true
+        - name: description
+          type: string
+          required: false
+        - name: config
+          type: object
+          required: true
+          schema:
+            - name: backend
+              type: backends
+              required: false
+            - name: enforcement
+              type: enforcement
+              required: true
+            - name: hooks
+              type: array
+              required: false
+              minItems: 1
+            - name: rotation
+              type: object
+              required: false
+              schema:
+                - name: period
+                  type: string
+                  required: true
+                - name: method
+                  type: methods
+                  required: false
+            - name: vault_backend
+              type: object
+              required: false
+              schema:
+                - name: bridge
+                  type: string
+                  required: false
+                - name: path
+                  type: string
+                  required: false
+                - name: issuance
+                  type: object
+                  required: false
+                  schema:
+                    - name: ttl
+                      type: number
+                      required: false
+                    - name: method
+                      type: methods
+                      required: false
+
+    - name: SealedSecretVaultConfig
+      fields:
+        - name: backend
+          type: backends
+          required: true
+          allowed: ["hashicorp_vault"]
+        - name: rotation_policy
+          type: object
+          required: false
+        - name: revocation_policy
+          type: object
+          required: false
+        - name: vault_backend
+          type: object
+          required: true
+          schema:
+            - name: bridge
+              type: string
+            - name: path
+              type: string
+            - name: issuance
+              type: object
+              schema:
+                - name: ttl
+                  type: number
+                - name: method
+                  type: methods
+
+    - name: RoleMapping
+      fields:
+        - name: role
+          type: string
+          required: true
+        - name: privileges
+          type: array
+          required: true
+          minItems: 1
+
+    - name: GovernanceConfig
+      fields:
+        - name: roles
+          type: array
+          required: true
+          minItems: 1
+          items: RoleMapping
+
+    - name: AuditConfig
+      fields:
+        - name: storage
+          type: storage
+          required: true
+        - name: export_format
+          type: export_format
+          required: true
+
+    - name: HookConfig
+      fields:
+        - name: name
+          type: string
+          required: true
+        - name: vendor
+          type: string
+          required: false
+        - name: scope
+          type: string
+          required: false
+
+  root:
+    - name: SAFE_RESOLUTION_MATRIX
+      fields:
+        - name: version
+          type: Version
+          required: true
+        - name: author_did
+          type: DID
+          required: true
+        - name: legal_refs
+          type: array
+          required: true
+          minItems: 1
+        - name: last_modified_utc
+          type: string
+          required: true
+        - name: modules
+          type: array
+          required: true
+          minItems: 1
+          items: ModuleConfig
+        - name: trailer
+          type: object
+          required: true
+          schema:
+            - name: SHA256_Matrix
+              type: SHA256
+              required: true
+            - name: Author_Signature
+              type: string
+              required: true
+            - name: Author_DID
+              type: DID
+              required: true
+            - name: Signing_Timestamp_UTC
+              type: string
+              required: true

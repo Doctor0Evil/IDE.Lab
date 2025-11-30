@@ -1,0 +1,48 @@
+# File operations - ALN runtime interface
+# These functions are thin runtime wrappers for file operations used by ALN tools
+
+exports:
+  - name: load
+    params:
+      - name: path
+        type: string
+    returns: object
+    impl: "runtime"
+
+  - name: strip_trailer
+    params:
+      - name: path
+      - name: trailer_marker
+        type: string
+    returns: object
+    impl: "runtime"
+    description: "Return a struct containing body_b64 and trailer dict"
+
+  - name: inject_trailer
+    params:
+      - name: path
+      - name: trailer
+        type: object
+    returns: boolean
+    impl: "runtime"
+
+  - name: lock
+    params:
+      - name: path
+    returns: boolean
+    impl: "runtime"
+
+  - name: read_body
+    params:
+      - name: path
+    returns: string
+    impl: "runtime"
+
+  - name: write_trailer
+    params:
+      - name: path
+      - name: trailer
+    returns: boolean
+    impl: "runtime"
+
+# End of file ops

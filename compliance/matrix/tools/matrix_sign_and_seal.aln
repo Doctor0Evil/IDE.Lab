@@ -1,0 +1,72 @@
+# Matrix Sign and Seal Tool - ALN
+# Reads a matrix draft without trailer, computes SHA256_Matrix, signs with DID author key, and writes finalized matrix
+
+imports:
+  - "../../did_signing_workflow.aln"
+  - "../../../schemas/aln/validation_engine.aln"
+  - "../../../schemas/utilities/crypto.aln"
+  - "../../../schemas/utilities/did_ion_bridge.aln"
+  - "../../../schemas/utilities/file_ops.aln"
+  - "../../../schemas/utilities/audit.aln"
+
+tool:
+  name: "matrix_sign_and_seal"
+  description: "Compute SHA256 of the matrix body, sign with DID, inject trailer, and persist as finalized matrix"
+  inputs:
+    - name: path
+      type: string
+    - name: author_did
+      type: string
+  run:
+    - alias: load_matrix
+      action: "file_ops.load"
+      params:
+        path: "${{inputs.path}}"
+    - alias: strip_trailer
+      action: "file_ops.strip_trailer"
+      params:
+        path: "${{inputs.path}}"
+        trailer_marker: "---TRAILER---"
+    - alias: compute_hash
+      action: "crypto.sha256_hex"
+      params:
+        input: "${{strip_trailer.body_b64}}"
+    - alias: payload_b64
+      action: "crypto.hex_to_base64"
+      params:
+        hex: "${{compute_hash}}"
+    - alias: sign_hash
+      action: "crypto.did_sign"
+      params:
+        did: "${{inputs.author_did}}"
+        payload: "${{payload_b64}}"
+    - alias: resolve_did
+      action: "did_ion_bridge.resolve_did_document"
+      params:
+        did: "${{inputs.author_did}}"
+    - alias: inject_trailer
+      action: "file_ops.inject_trailer"
+      params:
+        path: "${{inputs.path}}"
+        trailer:
+          SHA256_Matrix: "${{compute_hash}}"
+          Author_Signature: "${{sign_hash}}"
+          Author_DID: "${{inputs.author_did}}"
+          Signing_Timestamp_UTC: "${{now}}"
+    - alias: lock_file
+      action: "file_ops.lock"
+      params:
+        path: "${{inputs.path}}"
+    - alias: audit_write
+      action: "audit.write_worm_entry"
+      params:
+        stream: "worm_local"
+        record: |
+          action: "matrix_sign_and_seal"
+          status: "sealed"
+          matrix_path: "${{inputs.path}}"
+          author_did: "${{inputs.author_did}}"
+          timestamp: "${{now}}"
+          policy_version: "2025-11-30-01"
+
+# End of tool

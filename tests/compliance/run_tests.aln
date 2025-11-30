@@ -1,0 +1,44 @@
+# Test Runner - ALN
+# Execute compliance tests for SAFE_RESOLUTION matrix
+
+imports:
+  - "./test_safe_resolution_pipeline.aln"
+  - "../../schemas/utilities/mock_runtime.aln"
+  - "./test_policy_kernel.aln"
+  - "../security/test_windows_policies.aln"
+  - "../security/test_github_policies.aln"
+
+runner:
+  name: "compliance_test_runner"
+  run:
+    - action: "tests.execute"
+      params:
+        files:
+          - "tests/compliance/test_safe_resolution_pipeline.aln"
+          - "tests/compliance/test_policy_kernel.aln"
+          - "tests/security/test_windows_policies.aln"
+          - "tests/security/test_github_policies.aln"
+          - "tests/security/test_windows_hardening_checklist.aln"
+          - "tests/security/test_remote_access_guard.aln"
+          - "tests/security/test_k8s_cluster_security.aln"
+          - "tests/security/test_windows_agent_guard.aln"
+          - "tests/security/test_rdp_session_audit.aln"
+          - "tests/security/test_docker_windows_security.aln"
+          - "tests/security/test_ci_env_guard.aln"
+          - "tests/security/test_runner_isolation.aln"
+          - "tests/security/test_rce_guard.aln"
+          - "tests/security/test_windows_logon_policy.aln"
+          - "tests/security/test_windows_vault_agent_config.aln"
+          - "tests/security/test_k8s_network_guard.aln"
+          - "tests/security/test_file_integrity_windows.aln"
+          - "tests/security/test_ci_docker_guard.aln"
+          - "tests/security/test_ide_lab_cluster_profile.aln"
+          - "tests/runtime/test_system_exec_wrapper.aln"
+          - "cicd/hooks/security_automation_suite.aln"
+        runtime: "mock"
+    - action: "audit.write_worm_entry"
+      params:
+        stream: "worm_local"
+        record: { action: 'compliance_test', status: 'completed', timestamp: now() }
+
+# End of runner

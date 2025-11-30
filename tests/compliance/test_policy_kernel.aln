@@ -1,0 +1,77 @@
+# Policy Kernel tests - ALN
+# Tests numeric policy checks: T_max, latency, WORM, token abuse, CI job risk
+
+imports:
+  - "../../compliance/matrix/policy_kernel.aln"
+
+tests:
+  - name: "policy_ok"
+    run:
+      - action: "policy_kernel.compute_T_max_Raptor"
+        params:
+          P_total: 7000000000
+          b_w: 8
+          b_a: 16
+          d_model: 4096
+          B: 1
+          k_act: 4
+          M_GPU: 24
+          M_other: 2
+      - action: "policy_kernel.compute_latency_and_check"
+        params:
+          L_layers: 32
+          H_heads: 32
+          d_k: 64
+          d_model: 4096
+          B: 1
+          T_ctx: 100000
+          G_peak: 181e12
+          eta_overhead: 3
+    expect:
+      - code: "PASS"
+
+  - name: "vram_violation_should_fail"
+    run:
+      - action: "policy_kernel.compute_T_max_Raptor"
+        params:
+          P_total: 7000000000
+          b_w: 8
+          b_a: 16
+          d_model: 4096
+          B: 1
+          k_act: 4
+          M_GPU: 8
+          M_other: 2
+    expect:
+      - code: "FAIL"
+      - message_contains: "Not enough VRAM for weights"
+
+  - name: "latency_violation_should_fail"
+    run:
+      - action: "policy_kernel.compute_latency_and_check"
+        params:
+          L_layers: 128
+          H_heads: 32
+          d_k: 64
+          d_model: 4096
+          B: 1
+          T_ctx: 200000
+          G_peak: 10e12
+          eta_overhead: 4
+    expect:
+      - code: "FAIL"
+      - message_contains: "tau_real"
+
+  - name: "token_abuse_risk_should_fail"
+    run:
+      - action: "policy_kernel.compute_P_abuse"
+        params:
+          N_tokens: 10000
+          P_leak: 0.0001
+          T_life: 3600
+          W: 86400
+    expect:
+      - code: "FAIL"
+      - message_contains: "P_abuse"
+
+# End of policy kernel tests

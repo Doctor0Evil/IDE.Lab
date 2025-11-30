@@ -1,0 +1,229 @@
+# SAFE_RESOLUTION Policy Kernel - ALN
+# Encodes numeric constraints and checks for Raptor Mini, Vault tokens, WORM sizing, and CI job risk.
+
+imports:
+  - "../../deployment/raptor_mini_capacity.aln"
+  - "../../deployment/raptor_mini_qos_profile.aln"
+  - "../../secrets/integrations/hashicorp_vault_bridge.aln"
+
+policy:
+  name: "policy_kernel"
+  description: "Numeric policy checks used by CI and runtime guards (VRAM envelope, token risk, WORM sizing, retrieval budget, KV cache policy, CI job risk)"
+
+  constants:
+    - name: C_min
+      type: number
+      value: 1
+      desc: "minimum traceability coverage (1=every rule is enforced & audited)"
+    - name: P_abuse_max
+      type: number
+      value: 1e-6
+      desc: "max allowed expected abuse probability per retention window"
+    - name: tau_target
+      type: number
+      value: 4.0
+      desc: "p95 latency target in seconds for 200k context runs"
+    - name: S_min_cache
+      type: number
+      value: 2
+      desc: "Minimum speedup for enabling KV cache"
+    - name: PRE_COMMIT_BYPASS_ALLOWED
+      type: boolean
+      value: false
+      desc: "Allow documented bypass for pre-commit checks during emergency; should be false in normal ops"
+    - name: POLICY_VERSION
+      type: string
+      value: "2025-11-30-01"
+      desc: "Policy bundle version used in SAFE_RESOLUTION matrix and WORM logs"
+
+  profile:
+    - name: raptor
+      from: "../../deployment/raptor_mini_capacity.aln"
+
+  functions:
+    - name: compute_P_abuse
+      params:
+        - name: N_tokens
+          type: number
+        - name: P_leak
+          type: number
+        - name: T_life
+          type: number
+        - name: W
+          type: number
+      returns: object
+      impl: |
+        P_abuse = N_tokens * P_leak * (T_life / W)
+        return {valid: P_abuse <= P_abuse_max, P_abuse: P_abuse, limit: P_abuse_max}
+
+    - name: compute_WORM_size_GB
+      params:
+        - name: lambda_a
+          type: number
+        - name: S_entry
+          type: number
+        - name: T_ret
+          type: number
+      returns: object
+      impl: |
+        S_WORM_bytes = lambda_a * S_entry * T_ret
+        S_WORM_GB = S_WORM_bytes / (1024 ** 3)
+        return {size_GB: S_WORM_GB}
+
+    - name: compute_T_max_Raptor
+      params:
+        - name: P_total
+          type: number
+        - name: b_w
+          type: number
+        - name: b_a
+          type: number
+        - name: d_model
+          type: number
+        - name: B
+          type: number
+        - name: k_act
+          type: number
+        - name: M_GPU
+          type: number
+        - name: M_other
+          type: number
+      returns: object
+      impl: |
+        # Solve M_weights + M_act <= M_free for T
+        M_weights = P_total * b_w / (8 * 1024 ** 3)
+        M_free = M_GPU - M_other - M_weights
+        if M_free <= 0:
+          return {valid: false, reason: 'Not enough VRAM for weights'}
+        T_max = (M_free * (8 * 1024 ** 3)) / (k_act * B * d_model * b_a)
+        return {valid: T_max > 0, T_max: floor(T_max)}
+
+    - name: compute_latency_and_check
+      params:
+        - name: L_layers
+          type: number
+        - name: H_heads
+          type: number
+        - name: d_k
+          type: number
+        - name: d_model
+          type: number
+        - name: B
+          type: number
+        - name: T_ctx
+          type: number
+        - name: G_peak
+          type: number
+        - name: eta_overhead
+          type: number
+      returns: object
+      impl: |
+        F_attn_layer = 4 * B * H_heads * (T_ctx ** 2) * d_k
+        F_mlp_layer  = 8 * B * T_ctx * (d_model ** 2)
+        F_total      = L_layers * (F_attn_layer + F_mlp_layer)
+        tau_min      = F_total / G_peak
+        tau_real     = eta_overhead * tau_min
+        return {tau_min: tau_min, tau_real: tau_real, valid: tau_real <= tau_target}
+
+    - name: compute_retrieval_budget
+      params:
+        - name: T_ctx_max
+          type: number
+        - name: T_inst
+          type: number
+        - name: T_margin
+          type: number
+        - name: L_chunk
+          type: number
+      returns: object
+      impl: |
+        T_code_bud = T_ctx_max - (T_inst + T_margin)
+        if T_code_bud <= 0:
+          return {valid: false, reason: 'No code budget'}
+        N_chunk_max = floor(T_code_bud / L_chunk)
+        return {valid: true, T_code_bud: T_code_bud, N_chunk_max: N_chunk_max}
+
+    - name: compute_cache_speedup_and_threshold
+      params:
+        - name: T_base
+          type: number
+        - name: T_step
+          type: number
+        - name: n_step
+          type: number
+        - name: S_min
+          type: number
+      returns: object
+      impl: |
+        F_no_cache   = n_step * ((T_base + T_step) ** 2)
+        F_with_cache = (T_base ** 2) + n_step * T_step * (T_base + T_step)
+        if F_with_cache == 0:
+          return {valid: false, reason: 'zero denom'}
+        S_cache = F_no_cache / F_with_cache
+        return {valid: S_cache >= S_min, S_cache: S_cache}
+
+    - name: compute_CI_job_risk
+      params:
+        - name: k_j
+          type: number
+        - name: t_j
+          type: number
+        - name: p_j
+          type: number
+        - name: W_ci
+          type: number
+        - name: R_max
+          type: number
+      returns: object
+      impl: |
+        R_j = k_j * p_j * (t_j / W_ci)
+        return {R_j: R_j, valid: R_j <= R_max}
+
+  structs:
+    - name: ExecPolicy
+      fields:
+        - name: allowed_cmds
+          type: array
+          items: string
+        - name: max_timeout_secs
+          type: number
+        - name: max_output_kb
+          type: number
+
+  constants:
+    - name: EXEC_POLICY_DEFAULT
+      type: ExecPolicy
+      value:
+        allowed_cmds: ["powershell", "kubectl", "gh", "vault"]
+        max_timeout_secs: 60
+        max_output_kb: 256
+
+  - name: guard_exec
+    params:
+      - name: opts
+        type: object
+      - name: policy
+        type: ExecPolicy
+    returns: object
+    impl: |
+      # Validate the ExecOptions against the given ExecPolicy
+      allow_list = policy.allowed_cmds or []
+      if opts.cmd_name not in allow_list:
+        return { allowed: false, reason: 'cmd not allowed' }
+      if opts.timeout_secs and opts.timeout_secs > policy.max_timeout_secs:
+        return { allowed: false, reason: 'timeout too large' }
+      if opts.max_output_kb and opts.max_output_kb > policy.max_output_kb:
+        return { allowed: false, reason: 'output size too large' }
+      return { allowed: true }
+
+  policy_metadata:
+    - name: windows_hardening
+      data_source: prod
+    - name: k8s_cluster_security
+      data_source: prod
+    - name: github_org_security
+      data_source: prod
+    - name: raptor_mini_check
+      data_source: hybrid
+
+# End of policy kernel

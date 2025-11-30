@@ -1,0 +1,103 @@
+# ALN-style spec for GitHub Actions: COMPLIANCE_GUARDIAN
+# This spec maps to a CI workflow that invokes ALN runners for validation
+
+workflow:
+  name: "compliance_guardian"
+  on:
+    - pull_request
+    - push:
+        branches:
+          - "main"
+          - "release/*"
+
+  jobs:
+    aln-runner-matrix:
+      runs-on: ubuntu-latest
+      strategy:
+        fail-fast: false
+        matrix:
+          include:
+            - gpu_type: "none"
+              vram_gb: 8
+            - gpu_type: "consumer"
+              vram_gb: 16
+            - gpu_type: "pro"
+              vram_gb: 24
+      env:
+        ALN_RUNTIME: "mock"
+        RAPTOR_B_MAX: 1
+        RAPTOR_T_CTX_MAX: 200000
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v3
+        - name: Build ALN Runner image
+          run: |
+            docker build -f docker/Dockerfile.aln-runner -t ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} .
+        - name: Run ALN test harness (mock runtime)
+          run: |
+            docker run --rm -e ALN_RUNTIME=mock -e GPU_TYPE=${{ matrix.gpu_type }} -e VRAM_GB=${{ matrix.vram_gb }} ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} run_tests.aln
+
+    safe-resolution-validate:
+      runs-on: ubuntu-latest
+      needs: aln-runner-matrix
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v3
+        - name: Build ALN Runner image
+          run: |
+            docker build -f docker/Dockerfile.aln-runner -t ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} .
+        - name: Validate SAFE_RESOLUTION matrix
+          run: |
+            docker run --rm -e ALN_RUNTIME=mock -e GPU_TYPE=none -e VRAM_GB=8 ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} validate_safe_resolution_matrix.aln
+
+    security-suite:
+      runs-on: ubuntu-latest
+      needs: safe-resolution-validate
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v3
+        - name: Build ALN Runner image
+          run: |
+            docker build -f docker/Dockerfile.aln-runner -t ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} .
+        - name: ALN SAFE_RESOLUTION validation
+          run: |
+            docker run --rm -e ALN_RUNTIME=mock -e GPU_TYPE=none -e VRAM_GB=8 ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} cicd/hooks/validate_safe_resolution_matrix.aln
+        - name: ALN Security Automation Suite
+          run: |
+            docker run --rm -e ALN_RUNTIME=mock -e GPU_TYPE=none -e VRAM_GB=8 ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} cicd/hooks/security_automation_suite.aln
+
+    security-suite-prod:
+      runs-on: ubuntu-latest
+      needs: security-suite
+      if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.ref == 'refs/heads/main'
+      env:
+        ALN_RUNTIME: prod
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        KUBECONFIG: ${{ secrets.KUBECONFIG }}
+        VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+        VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v3
+        - name: Build ALN Runner image
+          run: |
+            docker build -f docker/Dockerfile.aln-runner -t ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} .
+        - name: ALN PROD runtime checks (non-destructive)
+          env:
+            ALN_RUNTIME: prod
+            ALN_EXEC_MODE: prod
+            GPU_TYPE: "gh-runner"
+            VRAM_GB: "14"
+          run: |
+            docker run --rm \
+              -e ALN_RUNTIME \
+              -e ALN_EXEC_MODE \
+              -e GPU_TYPE \
+              -e VRAM_GB \
+              -e GITHUB_TOKEN \
+              -e VAULT_ADDR \
+              -e VAULT_TOKEN \
+              -e KUBECONFIG \
+              -v "${{ github.workspace }}:/workspace" -w /workspace ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} ./docker/entrypoint_aln_runner.sh run_prod_tests.aln
+
+# End of ALN-style workflow spec

@@ -1,0 +1,12 @@
+imports:
+  - "../../security/cluster/k8s_cluster_security.aln"
+
+tests:
+  - name: TEST_K8S_CLUSTER_SECURITY
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "security/cluster/k8s_cluster_security.aln"
+          runtime: "mock"
+      - assert: true

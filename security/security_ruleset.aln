@@ -1,0 +1,46 @@
+# Security Ruleset - ALN
+# Define static analysis rules and enforcement gates for repository scanning
+
+ruleset:
+  name: "default_security_ruleset"
+  description: "Scans code for high risk patterns: eval usage, raw SQL concat, hardcoded tokens, http_for_secrets"
+  checks:
+    - id: "EVAL_USAGE"
+      pattern: "\\beval\\s*\\(" # heuristic
+      severity: "high"
+      remediation: "Refactor to use safer alternatives (e.g., built-in parsers or sandboxed interpreters)"
+      active: true
+    - id: "RAW_SQL_CONCAT"
+      pattern: "(SELECT|INSERT|UPDATE|DELETE).*\\+.*" # heuristic for concatenation
+      severity: "high"
+      remediation: "Use parameterized queries or ORM safe APIs"
+      active: true
+    - id: "HARDCODED_TOKENS"
+      pattern: "(API|TOKEN|SECRET|PASSWORD)\\s*[:=]\\s*['\"]{1}.+['\"]{1}"
+      severity: "critical"
+      remediation: "Use secret management (sealed_secret_vault) and remove tokens from source"
+      active: true
+    - id: "HTTP_FOR_SECRETS"
+      pattern: "http://.*(api|token|secret)" # insecure artifact handling
+      severity: "medium"
+      remediation: "Use https and secure channels/secret handles"
+      active: true
+
+  enforcement:
+    - severity: critical
+      action: "block_and_rollback"
+      hook: "../rollback/rollback_playbook.aln"
+    - severity: high
+      action: "fail_build"
+    - severity: medium
+      action: "warn"
+
+  ci_integration:
+    - pipeline: "../cicd/pipelines/build_and_test.aln"
+      pre_scan: true
+      on_violation:
+        critical: "block_and_rollback"
+        high: "fail_build"
+        medium: "warn"
+
+# End of security ruleset

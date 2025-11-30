@@ -1,0 +1,12 @@
+imports:
+  - "../../security/windows/remote_access_guard.aln"
+
+tests:
+  - name: TEST_REMOTE_ACCESS_GUARD
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "security/windows/remote_access_guard.aln"
+          runtime: "mock"
+      - assert: true

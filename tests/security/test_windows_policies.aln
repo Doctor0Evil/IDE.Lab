@@ -1,0 +1,31 @@
+# Minimal Windows security tests
+imports:
+  - "../../security/windows/windows_hardening.aln"
+  - "../../security/windows/windows_node_security.aln"
+  - "../../compliance/matrix/policy_kernel.aln"
+
+tests:
+  - name: TEST_WINDOWS_POLICIES
+    description: "Simulate a compliant vs. insecure Windows host and assert policy kernel results"
+    run:
+      - step: "setup_compliant"
+        action: "runtime.mock.create_host"
+        params: { ntfs_acl_enforced: true, bitlocker_enabled: true, patch_days: 2 }
+      - step: "check_compliant"
+        action: "runtime.mock.eval"
+        params:
+          policy: "windows_hardening_check"
+          host: "${{setup_compliant.host}}"
+      - assert: "${{check_compliant.valid}} == true"
+
+      - step: "setup_insecure"
+        action: "runtime.mock.create_host"
+        params: { ntfs_acl_enforced: false, bitlocker_enabled: false, patch_days: 90 }
+      - step: "check_insecure"
+        action: "runtime.mock.eval"
+        params:
+          policy: "windows_hardening_check"
+          host: "${{setup_insecure.host}}"
+      - assert: "${{check_insecure.valid}} == false"
+
+notes: "This test is minimal; add more rule-specific asserts later"

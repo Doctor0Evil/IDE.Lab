@@ -1,0 +1,20 @@
+# GitHub Org Security - Skeleton
+info:
+  name: "github_org_security"
+  version: "0.1.0"
+
+fields:
+  - name: org
+    type: string
+  - name: sso_enabled
+    type: boolean
+  - name: 2fa_required
+    type: boolean
+
+pipeline:
+  name: "org_security_eval"
+  steps:
+    - action: "runtime.mock.github_org_check"
+      params: { sso_required: true, two_factor_required: true }
+
+notes: "TODO: Integrate with GitHub API tokens and org settings"

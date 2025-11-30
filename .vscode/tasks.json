@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ALN: Run full tests via Docker",
+      "type": "shell",
+      "command": "docker build -f docker/Dockerfile.aln-runner -t ide-lab/aln-runner:local . ; docker run --rm -e ALN_RUNTIME=mock -v \"${workspaceFolder}:/workspace\" -w /workspace ide-lab/aln-runner:local ./docker/entrypoint_aln_runner.sh run_tests.aln",
+      "group": "build",
+      "presentation": {
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "ALN: Validate SAFE_RESOLUTION only",
+      "type": "shell",
+      "command": "docker build -f docker/Dockerfile.aln-runner -t ide-lab/aln-runner:local . ; docker run --rm -e ALN_RUNTIME=mock -v \"${workspaceFolder}:/workspace\" -w /workspace ide-lab/aln-runner:local ./docker/entrypoint_aln_runner.sh cicd/hooks/validate_safe_resolution_matrix.aln",
+      "group": "build",
+      "presentation": {"reveal": "always"}
+    }
+  ]
+}

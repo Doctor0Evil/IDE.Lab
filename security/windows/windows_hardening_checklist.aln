@@ -1,0 +1,28 @@
+# Windows Hardening Checklist - Skeleton
+info:
+  name: "windows_hardening_checklist"
+  version: "0.1.0"
+  description: "Checklist tasks for Windows baseline for SAFE_RESOLUTION"
+
+tasks:
+  - id: "check_gpo"
+    description: "Verify required GPOs are set"
+    type: task
+  - id: "check_defender"
+    description: "Ensure Defender/AM endpoint is running and up-to-date"
+    type: task
+  - id: "check_secureboot"
+    description: "Confirm secure boot / TPM presence"
+    type: task
+
+pipeline:
+  name: "windows_hardening_checklist_run"
+  steps:
+    - action: "runtime.mock.check_task"
+      params: {task: "check_gpo"}
+    - action: "runtime.mock.check_task"
+      params: {task: "check_defender"}
+    - action: "runtime.mock.check_task"
+      params: {task: "check_secureboot"}
+
+notes: "Future: add GPO query commands and remediate runbooks"

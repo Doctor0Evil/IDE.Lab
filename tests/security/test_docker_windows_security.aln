@@ -1,0 +1,12 @@
+imports:
+  - "../../security/docker/docker_windows_security.aln"
+
+tests:
+  - name: TEST_DOCKER_WINDOWS_SECURITY
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "security/docker/docker_windows_security.aln"
+          runtime: "mock"
+      - assert: true

@@ -1,0 +1,199 @@
+# Runtime Interfaces - ALN
+# Pure interface definitions for production/mocks to implement
+
+interfaces:
+  - name: crypto
+    functions:
+      - name: sha256_hex
+        params:
+          - name: input
+            type: bytes
+        returns: string
+        desc: "Return hex-encoded 64 char SHA256 digest"
+      - name: random_bytes
+        params:
+          - name: n
+            type: number
+        returns: bytes
+      - name: hex_to_base64
+        params:
+          - name: input
+            type: bytes
+        returns: string
+
+  - name: did_ion
+    functions:
+      - name: did_sign
+        params:
+          - name: did
+            type: string
+          - name: payload
+            type: bytes
+        returns: string
+      - name: did_verify_signature
+        params:
+          - name: did
+            type: string
+          - name: payload
+            type: bytes
+          - name: signature
+            type: string
+        returns: boolean
+      - name: resolve_did_document
+        params:
+          - name: did
+            type: string
+        returns: object
+
+  - name: file_ops
+    functions:
+      - name: file_read
+        params:
+          - name: path
+            type: string
+        returns: bytes
+      - name: file_write_atomic
+        params:
+          - name: path
+            type: string
+          - name: content
+            type: bytes
+        returns: boolean
+      - name: file_lock
+        params:
+          - name: path
+            type: string
+        returns: boolean
+
+  - name: audit
+    functions:
+      - name: write_worm_entry
+        params:
+          - name: stream
+            type: string
+          - name: record
+            type: object
+        returns: boolean
+
+  - name: vault_bridge
+    functions:
+      - name: issue_short_lived_token
+        params:
+          - name: VaultConfig
+            type: object
+          - name: AuthInput
+            type: object
+        returns: string
+      - name: inject_runtime_secret
+        params:
+          - name: token_handle
+            type: string
+          - name: secret_path
+            type: string
+          - name: secret_name
+            type: string
+        returns: object
+      - name: revoke_secret
+        params:
+          - name: token_handle
+            type: string
+        returns: boolean
+        params:
+          - name: token_handle
+            type: string
+        returns: boolean
+
+  - name: host_info
+    functions:
+      - name: host_get_facts
+        params: []
+        returns: object
+      - name: host_get_windows_events
+        params:
+          - name: Query
+            type: object
+        returns: object
+
+  - name: k8s_api
+    functions:
+      - name: k8s_get_nodes
+        params:
+          - name: Query
+            type: object
+        returns: list
+      - name: k8s_get_network_policies
+        params:
+          - name: Query
+            type: object
+        returns: list
+
+  - name: github_api
+    functions:
+      - name: gh_get_org_settings
+        params:
+          - name: org
+            type: string
+        returns: object
+      - name: gh_get_repo_settings
+        params:
+          - name: owner
+            type: string
+          - name: repo
+            type: string
+        returns: object
+
+  - name: ci_env
+    functions:
+      - name: ci_get_env
+        params: []
+        returns: object
+      - name: ci_get_job_metadata
+        params: []
+        returns: object
+
+    - name: exec_adapter
+      structs:
+        - name: ExecOptions
+          fields:
+            - name: cmd_name
+              type: string
+            - name: args
+              type: array
+              items: string
+            - name: env_allowlist
+              type: array
+              items: string
+            - name: cwd
+              type: string
+            - name: timeout_secs
+              type: number
+            - name: max_output_kb
+              type: number
+            - name: redaction_rules
+              type: array
+              items: string
+        - name: ExecResult
+          fields:
+            - name: exit_code
+              type: number
+            - name: stdout
+              type: string
+            - name: stderr
+              type: string
+            - name: redacted_log
+              type: string
+            - name: duration_ms
+              type: number
+      functions:
+        - name: exec_command
+          params:
+            - name: opts
+              type: ExecOptions
+          returns: ExecResult
+        - name: system_exec
+          params:
+            - name: opts
+              type: ExecOptions
+          returns: ExecResult
+
+# End of runtime_interfaces.aln

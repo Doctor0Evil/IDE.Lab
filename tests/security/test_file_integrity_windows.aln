@@ -1,0 +1,12 @@
+imports:
+  - "../../security/windows/file_integrity_windows.aln"
+
+tests:
+  - name: TEST_FILE_INTEGRITY_WINDOWS
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "security/windows/file_integrity_windows.aln"
+          runtime: "mock"
+      - assert: true

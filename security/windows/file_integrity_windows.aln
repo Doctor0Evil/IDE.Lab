@@ -1,0 +1,27 @@
+# File Integrity Monitoring for Windows - Skeleton
+info:
+  name: "file_integrity_windows"
+  version: "0.1.0"
+  description: "Periodic hashing and WORM logging for critical binaries and config files"
+
+structs:
+  - name: FileRecord
+    fields:
+      - name: path
+        type: string
+      - name: sha256
+        type: string
+      - name: ts
+        type: string
+
+pipeline:
+  name: "fim_scan"
+  steps:
+    - action: "runtime.mock.file_hash_scan"
+      params: { paths: ["C:\\Program Files\\aln-runner\\runner.exe"] }
+    - action: "audit.write_worm_entry"
+      params:
+        stream: "worm_local"
+        record: {action: 'fim_scan', result: 'ok'}
+
+notes: "TODO: Add Windows file monitoring and remediation steps"

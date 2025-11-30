@@ -1,0 +1,66 @@
+# Test runtime bindings (PROD mode) - Minimal non-destructive checks
+imports:
+  - "../../runtime/prod_runtime.aln"
+
+tests:
+  - name: TEST_PROD_RUNTIME_BINDINGS
+    run:
+      - alias: host_facts
+        action: "host_info.host_get_facts"
+      - alias: k8s_nodes
+        action: "k8s_api.k8s_get_nodes"
+      - alias: github_org
+        action: "github_api.gh_get_org_settings"
+        params:
+          org: "example-org"
+      - alias: ci_env
+        action: "ci_env.ci_get_env"
+      - assert: "${{host_facts}} is not null"
+      - assert: "${{k8s_nodes}} is not null"
+      - assert: "${{github_org}} is not null"
+      - name: exec_allowed_cmds
+        action: "exec_adapter.exec_command"
+        params:
+          opts:
+            cmd_name: "kubectl"
+            args: ['get', 'nodes']
+            timeout_secs: 30
+            max_output_kb: 64
+            redaction_rules: ['token']
+        output: { res: object }
+      - assert: "${{exec_allowed_cmds.res.exit_code}} == 0"
+
+      - name: exec_blocked_cmd
+        action: "exec_adapter.exec_command"
+        params:
+          opts:
+            cmd_name: "rm"
+            args: ['-rf', '/']
+            timeout_secs: 10
+            max_output_kb: 4
+        output: { res: object }
+      - assert: "${{exec_blocked_cmd.res.exit_code}} != 0"
+
+      - name: exec_timeout_enforced
+        action: "exec_adapter.exec_command"
+        params:
+          opts:
+            cmd_name: "powershell"
+            args: ['Start-Sleep', '120']
+            timeout_secs: 1
+            max_output_kb: 4
+        output: { res: object }
+      - assert: "${{exec_timeout_enforced.res.exit_code}} != 0"
+
+      - name: exec_output_truncation
+        action: "exec_adapter.exec_command"
+        params:
+          opts:
+            cmd_name: "powershell"
+            args: ['-Command', 'Write-Output ((\"a\") * 1024 * 10)']
+            timeout_secs: 10
+            max_output_kb: 1 # should truncate
+        output: { res: object }
+      - assert: "len(${{exec_output_truncation.res.redacted_log}}) <= 1024"
+
+notes: "This suite should be run only in staging/prod pipeline and should not perform destructive ops"

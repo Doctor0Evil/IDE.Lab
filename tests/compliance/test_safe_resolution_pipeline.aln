@@ -1,0 +1,134 @@
+# Test Harness: SAFE_RESOLUTION pipeline validation tests
+# Test cases: good matrix, header mismatch, hash mismatch, invalid signature, schema violations
+
+imports:
+  - "../../cicd/hooks/validate_safe_resolution_matrix.aln"
+
+helpers:
+  - name: create_variant
+    impl: "runtime"
+
+tests:
+  - name: "good_matrix_should_pass"
+    setup:
+      - action: "tests.create_matrix_variant"
+        params:
+          base: "compliance/matrix/safe_resolution_matrix.aln"
+          overrides:
+            trailer:
+              SHA256_Matrix: "0000000000000000000000000000000000000000000000000000000000000000"
+              Author_Signature: "VALID_SIGNATURE_BASE64"
+    run:
+      - action: "hooks.validate_safe_resolution_matrix"
+    expect:
+      - code: "PASS"
+
+  - name: "header_mismatch_should_fail"
+    setup:
+      - action: "tests.create_matrix_variant"
+        params:
+          base: "compliance/matrix/safe_resolution_matrix.aln"
+          overrides:
+            version: "99.99.0" # Wrong version
+    run:
+      - action: "hooks.validate_safe_resolution_matrix"
+    expect:
+      - code: "FAIL"
+      - message_contains: "Version mismatch"
+
+  - name: "hash_mismatch_should_fail"
+    setup:
+      - action: "tests.create_matrix_variant"
+        params:
+          base: "compliance/matrix/safe_resolution_matrix.aln"
+          mutate_body: true # intentionally tamper body
+    run:
+      - action: "hooks.validate_safe_resolution_matrix"
+    expect:
+      - code: "FAIL"
+      - message_contains: "HASH_MISMATCH"
+
+  - name: "signature_mismatch_should_fail"
+    setup:
+      - action: "tests.create_matrix_variant"
+        params:
+          base: "compliance/matrix/safe_resolution_matrix.aln"
+          overrides:
+            trailer:
+              Author_Signature: "INVALID_SIG"
+    run:
+      - action: "hooks.validate_safe_resolution_matrix"
+    expect:
+      - code: "FAIL"
+      - message_contains: "SIGNATURE_INVALID"
+
+  - name: "schema_violation_should_fail"
+    setup:
+      - action: "tests.create_matrix_variant"
+        params:
+          base: "compliance/matrix/safe_resolution_matrix.aln"
+          overrides:
+            modules: [] # remove modules
+    run:
+      - action: "hooks.validate_safe_resolution_matrix"
+    expect:
+      - code: "FAIL"
+      - message_contains: "NO_MODULES"
+
+  - name: "invalid_did_format_should_fail"
+    setup:
+      - action: "tests.create_matrix_variant"
+        params:
+          base: "compliance/matrix/safe_resolution_matrix.aln"
+          overrides:
+            author_did: "not-a-did"
+    run:
+      - action: "hooks.validate_safe_resolution_matrix"
+    expect:
+      - code: "FAIL"
+      - message_contains: "INVALID_DID_FORMAT"
+
+  - name: "invalid_sha_format_should_fail"
+    setup:
+      - action: "tests.create_matrix_variant"
+        params:
+          base: "compliance/matrix/safe_resolution_matrix.aln"
+          overrides:
+            trailer:
+              SHA256_Matrix: "not-a-sha"
+    run:
+      - action: "hooks.validate_safe_resolution_matrix"
+    expect:
+      - code: "FAIL"
+      - message_contains: "INVALID_SHA_FORMAT"
+
+  - name: "missing_sealed_secret_vault_config_should_fail"
+    setup:
+      - action: "tests.create_matrix_variant"
+        params:
+          base: "compliance/matrix/safe_resolution_matrix.aln"
+          mutate_module:
+            name: "sealed_secret_vault"
+            remove_config: true
+    run:
+      - action: "hooks.validate_safe_resolution_matrix"
+    expect:
+      - code: "FAIL"
+      - message_contains: "INVALID_ENFORCEMENT"
+
+  - name: "plaintext_secret_marker_should_fail"
+    setup:
+      - action: "tests.create_matrix_variant"
+        params:
+          base: "compliance/matrix/safe_resolution_matrix.aln"
+          mutate_module:
+            name: "sealed_secret_vault"
+            config_overrides:
+              token: "abcd1234"
+    run:
+      - action: "hooks.validate_safe_resolution_matrix"
+    expect:
+      - code: "FAIL"
+      - message_contains: "PLAINTEXT_SECRET_FIELD"
+
+# End of tests

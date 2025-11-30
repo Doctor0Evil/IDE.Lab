@@ -1,0 +1,65 @@
+# Hardened crypto utilities ALN stubs
+# These functions are runtime-native wrappers and include typed signatures
+
+imports:
+  - "./file_ops.aln"
+
+types:
+  - name: HEX64
+    type: string
+    pattern: "^[A-Fa-f0-9]{64}$"
+  - name: SIGNATURE_B64URL
+    type: string
+    pattern: "^[A-Za-z0-9_-]+(=){0,2}$"
+  - name: BYTES
+    type: string
+    description: "Base64-encoded bytes string for transport"
+
+exports:
+  - name: sha256_hex
+    params:
+      - name: input
+        type: BYTES
+    returns: HEX64
+    impl: "runtime"
+    description: "Return 64-hex char SHA256 digest of input bytes"
+
+  - name: random_bytes
+    params:
+      - name: n
+        type: number
+    returns: BYTES
+    impl: "runtime"
+    description: "Return base64-encoded random bytes; use for nonces and salt"
+
+  - name: did_sign
+    params:
+      - name: did
+        type: string
+      - name: payload
+        type: BYTES
+    returns: SIGNATURE_B64URL
+    impl: "runtime"
+    description: "Sign payload with DID controller's private key; returns base64url-encoded signature"
+
+  - name: did_verify_signature
+    params:
+      - name: did
+        type: string
+      - name: payload
+        type: BYTES
+      - name: signature
+        type: SIGNATURE_B64URL
+    returns: boolean
+    impl: "runtime"
+    description: "Verify DID signature over payload bytes"
+
+  - name: hex_to_base64
+    params:
+      - name: hex
+        type: HEX64
+    returns: BYTES
+    impl: "runtime"
+    description: "Convert hex string into base64-encoded bytes for transport to DID functions"
+
+# End of crypto utilities

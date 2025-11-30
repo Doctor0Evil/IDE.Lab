@@ -1,0 +1,27 @@
+# RDP Session Audit - Skeleton
+info:
+  name: "rdp_session_audit"
+  version: "0.1.0"
+  description: "WORM logging for privileged RDP/PowerShell sessions"
+
+structs:
+  - name: RdpSession
+    fields:
+      - name: session_id
+        type: string
+      - name: operator_did
+        type: string
+      - name: start_ts
+        type: string
+      - name: end_ts
+        type: string
+
+pipeline:
+  name: "write_rdp_audit"
+  steps:
+    - action: "audit.write_worm_entry"
+      params:
+        stream: "worm_local"
+        record: {action: 'rdp_session', status: 'active', session: RdpSession}
+
+notes: "TODO: Wire real session events from Windows event logs"

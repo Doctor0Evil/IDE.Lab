@@ -1,0 +1,16 @@
+# PROD Test Runner - ALN
+imports:
+  - "../runtime/run_prod_tests.aln"
+
+runner:
+  name: "prod_compliance_test_runner"
+  run:
+    - action: "tests.execute"
+      params:
+        files:
+          - "tests/runtime/run_prod_tests.aln"
+        runtime: "prod"
+    - action: "audit.write_worm_entry"
+      params:
+        stream: "worm_local"
+        record: { action: 'prod_compliance_test', status: 'completed', timestamp: now() }

@@ -1,0 +1,79 @@
+# DID Signing Workflow (did:ion) - SAFE_RESOLUTION matrix
+# This file defines the steps for matrix authors to generate key material and sign matrix artifacts
+
+imports:
+  - "../../schemas/aln/validation_engine.aln"
+  - "../../schemas/utilities/crypto.aln"
+  - "../../schemas/utilities/did_ion_bridge.aln"
+  - "../../schemas/utilities/file_ops.aln"
+
+workflow:
+  name: "did_signing_workflow"
+  description: "DID ION signing workflow for SAFE_RESOLUTION matrices"
+  roles:
+    - name: "author"
+      responsibilities:
+        - generate_did_keys: "Generate DID:ION key pair using offline HSM or secure hardware"
+        - publish_did_doc: "Publish verification method to DID registry if required"
+        - sign_matrix: "Calculate body hash and sign with private key; do not expose private key"
+    - name: "ci"
+      responsibilities:
+        - verify_signature: "Run validation pipeline to verify header, hash, signature"
+        - bait_protections: "Ensure WORM logs created upon signature verification failures"
+    - name: "secops"
+      responsibilities:
+        - custody: "Maintain secure custody of DID signing keys and rotation policies"
+        - approver: "Provide at least one DID-verified SecOps approval for any matrix change"
+    - name: "release"
+      responsibilities:
+        - approve_release: "Verify that matrix signing and validations passed prior to release"
+
+# Offline signing flow
+steps:
+  - name: compute_body_hash
+    action: "author:compute_hash"
+    description: "Take the matrix body (everything before ---TRAILER---) and compute SHA256 in hex using crypto.sha256_hex"
+    impl: |
+    body_text = file_ops.read_body('compliance/matrix/safe_resolution_matrix.aln')
+      body_b64 = base64.encode(body_text)
+      body_hash = crypto.sha256_hex(body_b64)
+      return body_hash
+  - name: sign_body_hash
+    action: "author:sign"
+    description: "Using the private key, sign the computed body hash; attach signature and signing timestamp"
+      impl: |
+      # Verify the DID can sign
+      if not did_ion_bridge.did_can_sign(author_did):
+        raise Error("Author DID not configured for signing")
+      payload_b64 = crypto.hex_to_base64(body_hash)
+      signature = crypto.did_sign(author_did, payload_b64)
+      return signature
+  - name: populate_trailer
+    action: "author:inject_trailer"
+    description: "Inject SHA256_Matrix, Author_Signature, Author_DID, Signing_Timestamp_UTC into the matrix trailer"
+      impl: |
+      trailer = {
+        'SHA256_Matrix': body_hash,
+        'Author_Signature': signature,
+        'Author_DID': author_did,
+        'Signing_Timestamp_UTC': now()
+      }
+      file_ops.inject_trailer('compliance/matrix/safe_resolution_matrix.aln', trailer)
+  - name: finalize_and_publish
+    action: "author:publish"
+    description: "Publish finalized matrix and create WORM audit entry; notify SecOps and Release"
+    impl: |
+      audit.write_worm_entry(stream='worm_local', record={
+        'action':'matrix_sign',
+        'matrix_path':'compliance/matrix/safe_resolution_matrix.aln',
+        'author_did': author_did,
+        'timestamp': now()
+      })
+
+# Chain of custody expectations
+responsibilities:
+  - "Private keys MUST be generated in a secure offline environment, stored in HSM or secure vault"
+  - "Signing should be performed offline wherever possible" 
+  - "CI and SecOps verify chain-of-custody via audit logs and verification of the DID doc"
+
+# End of DID Signing Workflow

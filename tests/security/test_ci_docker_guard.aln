@@ -1,0 +1,12 @@
+imports:
+  - "../../cicd/hooks/ci_docker_guard.aln"
+
+tests:
+  - name: TEST_CI_DOCKER_GUARD
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "cicd/hooks/ci_docker_guard.aln"
+          runtime: "mock"
+      - assert: true

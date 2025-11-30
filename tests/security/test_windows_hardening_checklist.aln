@@ -1,0 +1,12 @@
+imports:
+  - "../../security/windows/windows_hardening_checklist.aln"
+
+tests:
+  - name: TEST_WINDOWS_HARDENING_CHECKLIST
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "security/windows/windows_hardening_checklist.aln"
+          runtime: "mock"
+      - assert: true

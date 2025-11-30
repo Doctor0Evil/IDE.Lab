@@ -1,0 +1,83 @@
+# Security Automation Suite - Pipeline
+imports:
+  - "../../tests/security/test_windows_policies.aln"
+  - "../../tests/security/test_github_policies.aln"
+  - "../../deployment/raptor_mini_check.aln"
+  - "../../schemas/utilities/audit.aln"
+  - "../../compliance/matrix/policy_kernel.aln"
+
+hook:
+  name: "security_automation_suite"
+  description: "Execute security automation tests and raptor mini checks; log WORM summary; fail on any violation"
+  params:
+    - name: mode
+      type: string
+      default: "mock"
+      desc: "Run mode: mock or prod. When prod, ensure runner has required credentials and kubeconfig"
+  run:
+    - alias: run_security_tests
+      action: "tests.execute"
+      params:
+        files:
+          - "tests/security/test_windows_policies.aln"
+          - "tests/security/test_github_policies.aln"
+          - "tests/security/test_windows_hardening_checklist.aln"
+          - "tests/security/test_remote_access_guard.aln"
+          - "tests/security/test_k8s_cluster_security.aln"
+          - "tests/security/test_windows_agent_guard.aln"
+          - "tests/security/test_rdp_session_audit.aln"
+          - "tests/security/test_docker_windows_security.aln"
+          - "tests/security/test_ci_env_guard.aln"
+          - "tests/security/test_runner_isolation.aln"
+          - "tests/security/test_rce_guard.aln"
+          - "tests/security/test_windows_logon_policy.aln"
+          - "tests/security/test_windows_vault_agent_config.aln"
+          - "tests/security/test_k8s_network_guard.aln"
+          - "tests/security/test_file_integrity_windows.aln"
+          - "tests/security/test_ci_docker_guard.aln"
+          - "tests/security/test_ide_lab_cluster_profile.aln"
+          - "tests/runtime/test_system_exec_wrapper.aln"
+        runtime: "${{params.mode}}"
+
+    - alias: raptor_check
+      action: "runtime.eval"
+      params:
+        policy: "deployment/raptor_mini_check.aln"
+
+    - alias: write_security_summary
+      action: "audit.write_security_summary"
+      params:
+        stream: "worm_local"
+        summary:
+          action: "security_automation_suite"
+          policy_version: "2025-11-30-01"
+          results:
+            security_tests: "${{run_security_tests}}"
+            raptor: "${{raptor_check}}"
+          status: "${{if(run_security_tests.success && raptor_check.success) then 'ok' else 'fail'}}"
+
+    - alias: fail_on_error
+      action: "cicd.fail_if"
+      params:
+        condition: "${{not (run_security_tests.success && raptor_check.success)}}"
+        message: "Security automation suite failed"
+
+    - alias: verify_exec_policy
+      action: "cicd.eval"
+      params:
+        expression: "( 'powershell' in policy_kernel.EXEC_POLICY_DEFAULT.allowed_cmds ) and (policy_kernel.EXEC_POLICY_DEFAULT.max_timeout_secs <= 60) and (policy_kernel.EXEC_POLICY_DEFAULT.max_output_kb <= 256)"
+    - alias: exec_policy_fail
+      when: "${{not verify_exec_policy}}"
+      action: "cicd.fail_if"
+      params:
+        condition: true
+        message: "EXEC_POLICY_DEFAULT does not meet SAFE_RESOLUTION constraints"
+
+    - alias: exec_wrapper_validation
+      action: "tests.execute"
+      params:
+        files:
+          - "tests/runtime/test_system_exec_wrapper.aln"
+        runtime: "${{params.mode}}"
+
+notes: "This pipeline wires into CI as a gated check for SAFE_RESOLUTION enforcement"

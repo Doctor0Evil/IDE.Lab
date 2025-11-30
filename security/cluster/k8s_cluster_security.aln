@@ -1,0 +1,23 @@
+# K8s Cluster Security - Skeleton
+info:
+  name: "k8s_cluster_security"
+  version: "0.1.0"
+
+policies:
+  - id: no_privileged_containers
+    description: "Disallow privileged containers"
+    enforcement: required
+  - id: restrict_hostpath
+    description: "Block hostPath usage for critical workloads"
+    enforcement: required
+  - id: network_policies
+    description: "Ensure network policies are applied"
+    enforcement: optional
+
+pipeline:
+  name: "k8s_cluster_inspect"
+  steps:
+    - action: "runtime.mock.k8s_scan"
+      params: { enforce: ["no_privileged_containers", "restrict_hostpath"] }
+
+notes: "TODO: Add admission controller checks and real cluster API queries"

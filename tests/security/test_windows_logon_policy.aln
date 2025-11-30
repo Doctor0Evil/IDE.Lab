@@ -1,0 +1,12 @@
+imports:
+  - "../../security/windows/windows_logon_policy.aln"
+
+tests:
+  - name: TEST_WINDOWS_LOGON_POLICY
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "security/windows/windows_logon_policy.aln"
+          runtime: "mock"
+      - assert: true

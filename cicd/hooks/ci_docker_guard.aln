@@ -1,0 +1,24 @@
+# CI Docker Run Guard - Skeleton
+info:
+  name: "ci_docker_guard"
+  version: "0.1.0"
+  description: "Policies constraining Docker run invocations in CI"
+
+rules:
+  - id: image_allowlist
+    description: "Only allow signed/approved images"
+    enforcement: required
+  - id: resource_limits
+    description: "Enforce CPU/memory and GPU limits"
+    enforcement: required
+  - id: no_privileged_mode
+    description: "Block privileged docker run or host network"
+    enforcement: required
+
+pipeline:
+  name: "ci_docker_guard_eval"
+  steps:
+    - action: "runtime.mock.docker_eval"
+      params: { require_signed_images: true, forbid_privileged: true }
+
+notes: "TODO: integrate with docker scan tool and GitHub Actions policies"

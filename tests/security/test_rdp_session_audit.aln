@@ -1,0 +1,12 @@
+imports:
+  - "../../security/windows/rdp_session_audit.aln"
+
+tests:
+  - name: TEST_RDP_SESSION_AUDIT
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "security/windows/rdp_session_audit.aln"
+          runtime: "mock"
+      - assert: true

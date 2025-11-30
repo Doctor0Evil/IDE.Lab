@@ -1,0 +1,19 @@
+# K8s Network Guard - Skeleton
+info:
+  name: "k8s_network_guard"
+  version: "0.1.0"
+  description: "Reusable network policy templates for Kubernetes"
+
+templates:
+  - id: deny_all_except_vault
+    description: "Deny all ingress except to Vault and required telemetry targets"
+  - id: allow_only_raptor_service
+    description: "Allow traffic only to Raptor services from authorized namespaces"
+
+pipeline:
+  name: "netpol_apply_check"
+  steps:
+    - action: "runtime.mock.netpol_check"
+      params: { templates: ["deny_all_except_vault","allow_only_raptor_service"] }
+
+notes: "TODO: Integrate with actual NetworkPolicy manifests and apply/verify" 

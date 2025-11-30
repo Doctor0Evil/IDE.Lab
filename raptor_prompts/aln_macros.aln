@@ -1,0 +1,22 @@
+# Raptor-mini Macros - ALN
+# Reusable macros for regenerating or refactoring ALN files
+
+macros:
+  - name: regen_safe_resolution_schema
+    description: "Regenerate the SAFE_RESOLUTION schema and enforce type constraints"
+    command: "aln.refactor schema:schemas/aln/safe_resolution_schema.aln --emit-complete"
+
+  - name: regen_validation_engine
+    description: "Regenerate validation engine functions and ensure runtime bindings exist"
+    command: "aln.refactor engine:schemas/aln/validation_engine.aln --check-runtime"
+
+  - name: seal_matrix
+    description: "Produce a sealed matrix by computing SHA256, signing, and injecting a trailer"
+    command: "compliance/matrix/tools/matrix_sign_and_seal.aln --path compliance/matrix/safe_resolution_matrix.aln --author did:ion:..."
+
+# Macro execution notes:
+# - Always run macros with full repo context and runtime bindings (crypto, DID engine) available
+# - Macros emit syntactically complete ALN files and should be safe to commit
+# - Never output partial ALN fragments; macro commands must produce final files
+
+# End of macros

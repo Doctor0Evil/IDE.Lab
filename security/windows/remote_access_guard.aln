@@ -1,0 +1,21 @@
+# Remote Access Guard - Skeleton
+info:
+  name: "remote_access_guard"
+  version: "0.1.0"
+  description: "Prohibit direct RDP/SSH in non-admin networks; require bastion or zero-trust tunnel"
+
+rules:
+  - id: "no_direct_rdp"
+    description: "All RDP connections must come via a bastion host"
+    severity: high
+    enforcement: required
+  - id: "no_admin_rdp"
+    description: "No RDP from non-admin networks"
+    enforcement: required
+
+pipeline:
+  name: "remote_access_eval"
+  steps:
+    - action: "runtime.mock.remote_access_check"
+      params: { source_ip: '0.0.0.0/0' }
+      output: {valid: boolean}

@@ -1,0 +1,242 @@
+ # Mock runtime implementations for local testing ONLY
+ # Implementations should be replaced by real runtime bindings in production
+
+ imports:
+   - "../../runtime/runtime_interfaces.aln"
+   - "./crypto.aln"
+   - "./did_ion_bridge.aln"
+
+# Mock crypto implementations
+runtime_impl:
+  name: "crypto"
+  functions:
+    - name: sha256_hex
+      impl: |
+        # Simple deterministic mock hash for testing - DO NOT USE IN PRODUCTION
+        return '0' * 64
+    - name: random_bytes
+      impl: |
+        return base64.encode('random-bytes')
+runtime_impl:
+  name: "did_ion"
+  functions:
+    - name: did_sign
+      impl: |
+        # Fake signature as base64url representation of did+payload
+        return base64.urlsafe_encode(did + ':' + payload)
+    - name: did_verify_signature
+      impl: |
+        # In the mock runtime, signature is valid if it equals base64url(did + ':' + payload)
+        expected = base64.urlsafe_encode(did + ':' + payload)
+        return signature == expected
+
+    - name: resolve_did_document
+      impl: |
+        # Return a minimal DID doc for did:ion:*
+        if not did.startswith('did:ion:'):
+          return None
+        return { id: did, verificationMethod: [{ id: did + '#key-1', type: 'Ed25519VerificationKey2018'}], assertionMethod: [did + '#key-1'] }
+    - name: did_can_sign
+      impl: |
+        return did.startswith('did:ion:')
+    - name: did_get_key_id
+      impl: |
+        return did + '#key-1'
+
+runtime_impl:
+  name: "file_ops"
+  functions:
+    - name: file_read
+      impl: |
+        return file.read(context.path)
+    - name: file_write_atomic
+      impl: |
+        file.write(context.path, context.content)
+        return true
+    - name: file_lock
+      impl: |
+        return true
+    - name: strip_trailer
+      impl: |
+        # In the test mock, return body and trailer markers
+          body = file.read_body(context.path)
+        return { body_b64: base64.encode(body), trailer: '' }
+    - name: inject_trailer
+        impl: |
+          file.write_trailer(context.path, context.trailer)
+    - name: lock
+      impl: |
+        file.lock(context.path)
+
+runtime_impl:
+  name: "ci_env"
+  functions:
+    - name: ci_get_env
+      impl: |
+        return {
+          GITHUB_REF: env('GITHUB_REF', ''),
+          GITHUB_RUN_ID: env('GITHUB_RUN_ID', '')
+        }
+    - name: ci_get_job_metadata
+      impl: |
+        return { job: env('GITHUB_JOB', ''), actor: env('GITHUB_ACTOR', '') }
+
+runtime_impl:
+  name: "mock_ops"
+  functions:
+    - name: cicd.run
+      impl: |
+        # Pretend to run command; return success
+        return { success: true, stdout: '', stderr: '' }
+    - name: cicd.fail_if
+      impl: |
+        if context.condition:
+          raise Error(context.message)
+        return true
+    - name: cicd.env_set
+      impl: |
+        # Set environment variable on runtime handle
+        return true
+    - name: cicd.disable_pipeline
+      impl: |
+        return true
+    - name: cicd.eval
+      impl: |
+        return eval(context.expression)
+    - name: rpc.send_did_message
+      impl: |
+        return true
+    - name: write_worm_entry
+      impl: |
+        # In mock, write an entry to a local JSON file or no-op
+        return true
+    - name: issue_short_lived_token
+      impl: |
+        return 'mock-token-handle-1234'
+    - name: inject_runtime_secret
+      impl: |
+        return { handle: 'mock-secret-handle-1234' }
+    - name: revoke_secret
+      impl: |
+        return true
+    - name: rotate_secret
+      impl: |
+        return { rotated: true }
+
+    - name: runtime.mock.check_windows
+      impl: |
+        controls = context.controls or []
+        # If any expected control is missing from stubbed host, return false
+        return { valid: true, details: { controls: controls } }
+
+    - name: runtime.mock.node_check
+      impl: |
+        cfg = context.config or {}
+        valid = cfg.get('ntfs_acl_enforced', false) and cfg.get('bitlocker_enabled', false)
+        return { valid: valid }
+
+    - name: runtime.mock.remote_access_check
+      impl: |
+        # Fail when source_ip equals 0.0.0.0/0 in mock
+        return { valid: false }
+
+    - name: k8s_get_nodes
+      impl: |
+        return [{name: 'node-1', os: 'Windows-2022', taints: [], labels: {role: 'worker'}}]
+    - name: k8s_get_network_policies
+      impl: |
+        return [{name: 'deny-everything', namespace: 'default'}]
+    - name: runtime.mock.k8s_scan
+      impl: |
+        return { valid: true }
+    - name: gh_get_org_settings
+      impl: |
+        return { sso_enabled: true, '2fa_required': true }
+    - name: gh_get_repo_settings
+      impl: |
+        return { branch_protection_enabled: true, required_checks: ['validate_safe_resolution'] }
+    - name: host_get_facts
+      impl: |
+        return { os: 'Windows-2022', patch_days: 2, bitlocker: true, defender_enabled: true }
+    - name: host_get_windows_events
+      impl: |
+        return [{id: 4624, user: 'did:ion:mock', ts: now()}]
+    - name: ci_get_env
+      impl: |
+        return { GITHUB_REF: env('GITHUB_REF', ''), GITHUB_RUN_ID: env('GITHUB_RUN_ID', '' ) }
+    - name: ci_get_job_metadata
+      impl: |
+        return { job: env('GITHUB_JOB', ''), actor: env('GITHUB_ACTOR', '' ) }
+    - name: system_exec
+      impl: |
+        # Mock system exec just forwards to exec_command for simplicity
+        return exec_command(context.opts)
+    - name: exec_command
+      impl: |
+        opts = context.opts or {}
+        cmd = opts.get('cmd_name', '')
+        result = { exit_code: 1, stdout: '', stderr: '', redacted_log: '', duration_ms: 10 }
+        if cmd == 'powershell':
+          result.exit_code = 0
+          result.stdout = '{"host":{"os":"Windows-2022","bitlocker":true}}'
+          result.stderr = ''
+        elif cmd == 'kubectl':
+          result.exit_code = 0
+          result.stdout = '{"items": [{"metadata":{"name":"node-1"}}]}'
+        elif cmd == 'gh':
+          result.exit_code = 0
+          result.stdout = '{"sso_enabled":true, "2fa_required":true}'
+        elif cmd == 'vault':
+          result.exit_code = 0
+          result.stdout = '{"token":"mock-token-handle-1234"}'
+        else:
+          result.exit_code = 2
+          result.stderr = 'command not allowed in mock runtime'
+        # Simple redaction: mask 'token' values
+        redacted = result.stdout.replace('mock-token-handle-1234', '***')
+        result.redacted_log = redacted
+        return result
+
+    - name: runtime.mock.github_org_check
+      impl: |
+        cfg = context or {}
+        sso = cfg.get('sso_enabled', false)
+        twof = cfg.get('2fa_required', false)
+        return { valid: sso and twof }
+
+    - name: runtime.mock.github_repo_check
+      impl: |
+        cfg = context or {}
+        return { valid: cfg.get('branch_protection_enabled', false) and len(cfg.get('required_checks', [])) > 0 }
+
+    - name: runtime.mock.agent_check
+      impl: |
+        cfg = context or {}
+        return { valid: cfg.get('patch_days', 999) -lt 30 and cfg.get('am_status', true) }
+
+    - name: runtime.mock.pattern_check
+      impl: |
+        patterns = context.patterns or []
+        return { valid: true }
+
+    - name: runtime.mock.logon_check
+      impl: |
+        return { valid: true }
+
+    - name: runtime.mock.vault_agent_check
+      impl: |
+        return { valid: context.tls_required and context.certificate_pinning and context.cache_encrypted }
+
+    - name: runtime.mock.netpol_check
+      impl: |
+        return { valid: true }
+
+    - name: runtime.mock.file_hash_scan
+      impl: |
+        return { valid: true }
+
+    - name: runtime.mock.docker_eval
+      impl: |
+        return { valid: true }
+
+# End of mock runtime

@@ -1,0 +1,20 @@
+name: "SAFE_RESOLUTION Pre-merge Checks"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/*'
+
+jobs:
+  pre-merge-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build ALN Runner image
+        run: |
+          docker build -f docker/Dockerfile.aln-runner -t ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} .
+      - name: Raptor capacity check + SAFE_RESOLUTION validation
+        run: |
+          docker run --rm -e ALN_RUNTIME=mock -e GPU_TYPE=pro -e VRAM_GB=24 ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} raptor_mini_check.aln
+          docker run --rm -e ALN_RUNTIME=mock -e GPU_TYPE=none -e VRAM_GB=8 ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} validate_safe_resolution_matrix.aln

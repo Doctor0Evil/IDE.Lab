@@ -1,0 +1,34 @@
+# Raptor Mini QoS Profile - ALN
+# Define QoS weights, thresholds, and scoring for IDE.Lab deployments
+
+qos_profile:
+  name: "raptor_mini_qos_profile"
+  description: "QoS weights and thresholds to compute a monitoring score for Raptor Mini sessions"
+  thresholds:
+    L_target: 1.0 # target p95 latency in seconds
+    passk_target: 0.8
+    acc_target: 0.85
+    revert_max: 0.1
+  weights:
+    w_L: 0.4
+    w_P: 0.3
+    w_A: 0.2
+    w_R: 0.1
+  benchmark:
+    alpha_S: 1.0
+    alpha_D: 0.5
+    alpha_T: 0.2
+  metric_definitions:
+    - name: L_p95
+      description: "p95 latency for responses"
+    - name: passk
+      description: "pass@k success rate"
+    - name: acc
+      description: "edit acceptance rate"
+    - name: revert
+      description: "revert rate for applied edits"
+
+  compute:
+    QoS_expr: "1 - (w_L * min(L_p95 / L_target,1) + w_P * max((passk_target - passk) / passk_target,0) + w_A * max((acc_target - acc) / acc_target,0) + w_R * min(revert / revert_max,1))"
+
+# End of QoS profile

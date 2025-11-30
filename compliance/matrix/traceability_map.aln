@@ -1,0 +1,44 @@
+# Traceability Map: Compliance matrix -> enforcement -> WORM audit categories / DPIA obligations
+
+traceability_map:
+  name: "safe_resolution_traceability"
+  mappings:
+    - module: "dev_tunnel"
+      enforcement_artifacts:
+        - "cicd/hooks/validate_safe_resolution_matrix.aln"
+      worm_categories: ["matrix_validation","dev_tunnel_access"]
+      dpia: ["data_minimization","access_control"]
+    - module: "sealed_secret_vault"
+      enforcement_artifacts:
+        - "secrets/integrations/hashicorp_vault_bridge.aln"
+        - "cicd/hooks/secret_injection.aln"
+      worm_categories: ["secrets_issue","secret_access","rotation"]
+      dpia: ["data_protection","least_privilege"]
+    - module: "workload_attestation"
+      enforcement_artifacts:
+        - "security/runtime/attestation_gate.aln"
+      worm_categories: ["attestation","runtime_security"]
+      dpia: ["integrity","data_minimization"]
+    - module: "ci_cd_pipeline"
+      enforcement_artifacts:
+        - "cicd/pipelines/build_and_test.aln"
+        - "cicd/hooks/validate_safe_resolution_matrix.aln"
+      worm_categories: ["ci_events","matrix_validation","deployments"]
+      dpia: ["auditability","accountability"]
+    - module: "security_ruleset"
+      enforcement_artifacts:
+        - "security/security_ruleset.aln"
+      worm_categories: ["vulnerabilities","policy_violation"]
+      dpia: ["security_monitoring","incident_response"]
+    - module: "governance"
+      enforcement_artifacts:
+        - "compliance/matrix/did_signing_workflow.aln"
+      worm_categories: ["approvals","chain_of_custody"]
+      dpia: ["consent","justification"]
+    - module: "audit"
+      enforcement_artifacts:
+        - "all: audit.write_worm_entry"
+      worm_categories: ["worm_logs","incidents","compliance"]
+      dpia: ["retention_control","warranties"]
+
+# End of traceability map

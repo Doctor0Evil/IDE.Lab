@@ -1,0 +1,52 @@
+# Dockerfile.aln-runner - ALN Runner Container
+# Minimal base, install openssl, curl, unzip, vault CLI, and create an aln-runner shim
+
+ARG VAULT_VERSION="1.14.4"
+ARG ALN_RUNNER_URL="https://example.com/aln-runner/latest/aln-runner"
+
+FROM debian:bookworm-slim
+
+ARG VAULT_VERSION
+ARG ALN_RUNNER_URL
+
+LABEL maintainer="Doctor0Evil <doctor0evil@example.com>"
+
+# Install OS dependencies and Vault CLI
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  ca-certificates curl openssl unzip bash git procps gnupg jq && \
+  rm -rf /var/lib/apt/lists/*
+
+# Install Vault CLI
+RUN curl -sSLo /tmp/vault.zip \
+    https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip && \
+  unzip /tmp/vault.zip -d /usr/local/bin && rm /tmp/vault.zip && chmod +x /usr/local/bin/vault
+
+# Create workspace and user
+RUN useradd -m -s /bin/bash alnuser || true
+WORKDIR /workspace
+
+# Copy project trees (we'll copy minimal set for repo tests)
+# Copying only top-level directories that we expect existing in repo
+COPY schemas/ ./schemas/
+COPY cicd/ ./cicd/
+COPY compliance/ ./compliance/
+COPY security/ ./security/
+COPY tests/ ./tests/
+COPY raptor_prompts/ ./raptor_prompts/
+COPY deployment/ ./deployment/
+
+# Install aln-runner shim - for production replace with actual binary
+COPY docker/aln-runner /usr/local/bin/aln-runner
+RUN chmod +x /usr/local/bin/aln-runner
+
+# Copy entrypoint and config
+COPY docker/entrypoint_aln_runner.sh /usr/local/bin/entrypoint_aln_runner.sh
+COPY docker/aln-runner-config.aln /workspace/cicd/aln-runner-config.aln
+COPY docker/system_exec_wrapper.sh /usr/local/bin/system_exec_wrapper.sh
+RUN chmod +x /usr/local/bin/entrypoint_aln_runner.sh
+RUN chmod +x /usr/local/bin/system_exec_wrapper.sh
+
+ENV PATH="/usr/local/bin:${PATH}"
+
+ENTRYPOINT ["/usr/local/bin/entrypoint_aln_runner.sh"]
+CMD ["run_tests.aln"]

@@ -1,0 +1,12 @@
+imports:
+  - "../../secrets/integrations/windows_vault_agent_config.aln"
+
+tests:
+  - name: TEST_WINDOWS_VAULT_AGENT_CONFIG
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "secrets/integrations/windows_vault_agent_config.aln"
+          runtime: "mock"
+      - assert: true

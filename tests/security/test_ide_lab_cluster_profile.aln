@@ -1,0 +1,12 @@
+imports:
+  - "../../deployment/ide_lab_cluster_profile.aln"
+
+tests:
+  - name: TEST_IDE_LAB_CLUSTER_PROFILE
+    run:
+      - action: "tests.execute"
+        params:
+          files:
+            - "deployment/ide_lab_cluster_profile.aln"
+          runtime: "mock"
+      - assert: true

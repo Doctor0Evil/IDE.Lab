@@ -1,0 +1,23 @@
+# Runner Isolation - Skeleton
+info:
+  name: "runner_isolation"
+  version: "0.1.0"
+  description: "Restrict which repos/workflows can use particular self-hosted runners"
+
+structs:
+  - name: RunnerACL
+    fields:
+      - name: runner_id
+        type: string
+      - name: allowed_repos
+        type: array
+      - name: allowed_workflows
+        type: array
+
+pipeline:
+  name: "runner_acl_check"
+  steps:
+    - action: "runtime.mock.runner_acl_check"
+      params: {acl: RunnerACL}
+
+notes: "TODO: hook into GH Actions registration and agent attributes"

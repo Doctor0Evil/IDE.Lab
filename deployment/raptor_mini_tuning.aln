@@ -1,0 +1,26 @@
+# Raptor Mini Tuning Math - ALN
+# Encodes simple formulas for quantization, pruning, and KV-cache benefits
+
+math:
+  P_total: 22000000000
+  b_w: 8
+  b_a: 16
+  d_model: 4096
+  B: 1
+  T_ctx_max: 200000
+  k_act: 4
+  M_GPU_GB: 48
+  M_other_GB: 4
+
+derived:
+  M_weights_GB: P_total * b_w / (8 * 1024^3)
+  M_act_GB: k_act * B * T_ctx_max * d_model * b_a / (8 * 1024^3)
+  M_free_GB: M_GPU_GB - M_other_GB
+
+constraints:
+  - expr: "M_weights_GB + M_act_GB <= M_free_GB"
+
+notes:
+  - "Use KV-cache for multi-step interactions to reduce repeated token quadratic cost"
+  - "Consider head-pruning for code-sensitive contexts and a conservative structured sparsity of up to 20%"
+  - "Test quantization modes (8-bit, 4-bit) under A/B experiments to validate pass@k drop and PP increase"
