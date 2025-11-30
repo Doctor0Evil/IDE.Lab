@@ -32,6 +32,7 @@ jobs:
           echo "$HOME/.aln/bin" >> $GITHUB_PATH
 
       - name: Cache ALN dependencies
+        id: deps-cache
         uses: actions/cache@v4
         with:
           path: |
@@ -40,6 +41,10 @@ jobs:
           key: ${{ runner.os }}-aln-${{ hashFiles('**/aln.lock') }}
           restore-keys: |
             ${{ runner.os }}-aln-
+
+      - name: Show cache status
+        run: |
+          echo "ALN deps cache hit: ${{ steps.deps-cache.outputs.cache-hit }}"
 
       - name: Sync ALN dependencies
         run: |
