@@ -3,5 +3,7 @@
   "required_envs": ["DID_PROXY_URL"],
   "allow_mock_mode": true,
   "mock_allowed_domains": ["mock://ci"],
+  "allowed_proc_exec_paths": ["aln/tools", "aln/ci"],
+  "scan_for_gh_cli": true,
   "audit_file": "ci_audit.log"
 }

@@ -1,0 +1,40 @@
+name: CI Policy Smoke Test
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  policy-smoke-test:
+    runs-on: ubuntu-latest
+    env:
+      DID_PROXY_MOCK: "true"
+      DID_PROXY_URL: "mock://ci"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up ALN toolchain
+        run: |
+          curl -sSL https://get.aln.sh/install | bash
+          echo "$HOME/.aln/bin" >> $GITHUB_PATH
+
+      - name: Sync ALN dependencies
+        run: |
+          aln deps sync
+
+      - name: Run policy check
+        run: |
+          aln run tools.policy_check
+
+      - name: Run policy enforcement and audit demo
+        run: |
+          aln run ci.core
+
+      - name: Assert policy succeeded and audit created
+        run: |
+          if [ ! -f ci_audit.log ]; then
+            echo "ci_audit.log not found"; exit 1;
+          fi
+          echo "Policy smoke test complete";

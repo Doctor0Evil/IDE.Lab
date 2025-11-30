@@ -57,6 +57,42 @@ module tools.policy_check {
         return true;
     }
 
+    // Ensure proc.exec is only used inside allowed modules
+    fn check_proc_exec_pol(pol: json.Node) -> bool {
+        let allowed = pol.get_array("allowed_proc_exec_paths");
+        let files = std.fs.glob("aln/**/*.aln");
+        for (f in files) {
+            let content = std.fs.read_file(f);
+            if (content.contains("proc.exec(")) {
+                // find if this file's path matches one of allowed paths
+                let ok = false;
+                for (ap in allowed) {
+                    let pathPrefix = ap.to_string().replace("\"", "");
+                    if (f.starts_with(pathPrefix)) { ok = true; break; }
+                }
+                if (!ok) {
+                    log.error("policy_check", "Unapproved proc.exec use in: " + f);
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    fn check_gh_cli(pol: json.Node) -> bool {
+        let scan = pol.get_bool("scan_for_gh_cli");
+        if (!scan) { return true; }
+        let patternFiles = std.fs.glob("scripts/**/*.*");
+        for (pf in patternFiles) {
+            let content = std.fs.read_file(pf);
+            if (content.contains("gh ") || content.contains("gh" + "auth") || content.contains("gh pr")) {
+                log.error("policy_check", "GH CLI found in script file: " + pf + "; scripts with GH CLI must be flagged as local-only or migrated to ALN.");
+                return false;
+            }
+        }
+        return true;
+    }
+
     export fn main() -> int {
         let pol = load_policy();
         if (pol.is_null()) { log.error("policy_check", "unable to parse policy file"); return 1; }
@@ -64,6 +100,8 @@ module tools.policy_check {
         if (!assert_required_envs(pol)) { return 1; }
         if (!check_no_python(pol)) { return 1; }
         if (!check_mock_allowed(pol)) { return 1; }
+        if (!check_proc_exec_pol(pol)) { return 1; }
+        if (!check_gh_cli(pol)) { return 1; }
 
         log.info("policy_check", "policy validation passed");
         return 0;
