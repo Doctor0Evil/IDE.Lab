@@ -4,6 +4,8 @@ module ci.core {
     import std.log;
     import std.env;
     import tools.did_proxy;
+    import tools.policy_check;
+    import tools.audit_ci;
 
     contract Step {
         fn name() -> string;
@@ -68,11 +70,20 @@ module ci.core {
     fn prepare_ci_session() -> int {
         let branch = env.get("GITHUB_REF_NAME");
         if (branch == "") { branch = "local"; }
+        // Validate policy before requesting capabilities
+        let pol_rc = tools.policy_check::main();
+        if (pol_rc != 0) {
+            log.error("ci", "policy_check failed; aborting pipeline");
+            return 1;
+        }
         let cap = did_proxy.request_ci_capability("aln-ci-core", branch);
         if (cap.value == "") {
             log.error("ci", "failed to obtain DID-based CI capability; aborting");
             return 1;
         }
+        // Add redacted audit entry for this capability exchange
+        let repo = env.get("GITHUB_REPOSITORY");
+        audit_ci.log_event(repo, branch, "aln-ci-core", cap.scope);
         // Optionally set environment variable for downstream steps (not logged)
         // In real workflows we may use secrets or a secure context to pass the temporary capability safely
         return 0;
