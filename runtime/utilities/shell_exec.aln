@@ -1,0 +1,39 @@
+# Shell exec helper - wrapper for exec_adapter.exec_command
+
+imports:
+  - "../runtime_interfaces.aln"
+
+exports:
+  - name: run
+    params:
+      - name: cmd
+        type: string
+      - name: args
+        type: array
+        items: string
+        optional: true
+      - name: opts
+        type: object
+        optional: true
+    returns: object
+    impl: |
+      # Normalize inputs
+      provided_args = context.args or []
+      provided_cmd = context.cmd
+      opts_map = context.opts or {}
+
+      # If the caller passed a single string command with no args, run it through bash -lc
+      if provided_args.len() == 0 and provided_cmd.contains(' ') {
+        # Use shell form: bash -lc "<cmd>"
+        opts_map.cmd_name = 'bash'
+        opts_map.args = ['-lc', provided_cmd]
+      } else if provided_args.len() == 0 {
+        # Only a single word, run directly
+        opts_map.cmd_name = provided_cmd
+        opts_map.args = []
+      } else {
+        opts_map.cmd_name = provided_cmd
+        opts_map.args = provided_args
+      }
+
+      return exec_adapter.exec_command(opts_map)

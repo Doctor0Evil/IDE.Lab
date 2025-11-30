@@ -1,0 +1,123 @@
+module RaptorGitFixDetachedHead
+
+imports:
+  - "../../runtime/utilities/shell_exec.aln"
+  - "../../runtime/utilities/log.aln"
+
+struct FixParams {
+  target_branch: string
+  allow_rebase_continue: boolean
+  allow_rebase_abort: boolean
+}
+
+struct GitStatus {
+  is_symbolic_head: boolean
+  head_ref: string
+  head_commit: string
+  mid_rebase: boolean
+}
+
+pipeline FIX_DETACHED_HEAD {
+  input:
+    params: FixParams
+  run:
+    - alias: detect_git_state
+      action: "runtime.eval"
+      params:
+        expression: |
+          # Get HEAD ref, commit, and rebase state via shell.run
+          head_ref_res = shell.run('git', ['symbolic-ref', '--short', 'HEAD'], {fail_ok: true})
+          is_symbolic = head_ref_res.exit_code == 0
+          head_ref = is_symbolic ? head_ref_res.stdout.trim() : '<detached>'
+
+          head_commit_res = shell.run('git', ['rev-parse', 'HEAD'], {fail_ok: false})
+          head_commit = head_commit_res.stdout.trim()
+
+          rebase_merge = shell.run('bash', ['-lc', 'test -d .git/rebase-merge && echo yes || echo no'], {fail_ok: true})
+          rebase_apply = shell.run('bash', ['-lc', 'test -d .git/rebase-apply && echo yes || echo no'], {fail_ok: true})
+          mid_rebase = (rebase_merge.stdout.trim() == 'yes') || (rebase_apply.stdout.trim() == 'yes')
+
+          status = GitStatus{ is_symbolic_head: is_symbolic, head_ref: head_ref, head_commit: head_commit, mid_rebase: mid_rebase }
+          log.info('RaptorGitFixDetachedHead', 'Git HEAD state: symbolic=' + is_symbolic.to_string() + ' ref=' + head_ref + ' commit=' + head_commit + ' mid_rebase=' + mid_rebase.to_string())
+          return status
+
+    - alias: handle_symbolic_head
+      action: "runtime.eval"
+      params:
+        expression: |
+          status = ${{ detect_git_state }}
+          if status.is_symbolic_head {
+            log.info('RaptorGitFixDetachedHead', 'HEAD is already attached to branch: ' + status.head_ref + ' — no fix needed.')
+            return { ok: true }
+          }
+          return { ok: false }
+
+    - alias: handle_mid_rebase
+      when: "${{ not detect_git_state.is_symbolic_head }}"
+      action: "runtime.eval"
+      params:
+        expression: |
+          status = ${{ detect_git_state }}
+          params = context.params or {}
+          if not status.mid_rebase {
+            return { ok: false }
+          }
+
+          log.warn('RaptorGitFixDetachedHead', 'Repository is mid-rebase on commit ' + status.head_commit + ' with detached HEAD. Attempting repair based on params.')
+
+          if params.allow_rebase_continue {
+            cont = shell.run('git', ['rebase', '--continue'], {fail_ok: true})
+            if cont.exit_code == 0 {
+              log.info('RaptorGitFixDetachedHead', 'git rebase --continue succeeded. Re-checking HEAD.')
+              head_ref_res2 = shell.run('git', ['symbolic-ref', '--short', 'HEAD'], {fail_ok: true})
+              if head_ref_res2.exit_code == 0 {
+                log.info('RaptorGitFixDetachedHead', 'HEAD is now attached to branch: ' + head_ref_res2.stdout.trim())
+                return { ok: true }
+              }
+            } else {
+              log.warn('RaptorGitFixDetachedHead', 'git rebase --continue failed with exit_code=' + cont.exit_code.to_string())
+            }
+          }
+
+          if params.allow_rebase_abort {
+            abort = shell.run('git', ['rebase', '--abort'], {fail_ok: true})
+            if abort.exit_code == 0 {
+              log.info('RaptorGitFixDetachedHead', 'git rebase --abort succeeded. Re-attaching HEAD to target branch: ' + params.target_branch)
+              co = shell.run('git', ['checkout', params.target_branch], {fail_ok: true})
+              if co.exit_code != 0 {
+                log.error('RaptorGitFixDetachedHead', 'git checkout ' + params.target_branch + ' failed with exit_code=' + co.exit_code.to_string())
+                raise Error('Failed to checkout target branch after rebase abort.')
+              }
+              return { ok: true }
+            } else {
+              log.error('RaptorGitFixDetachedHead', 'git rebase --abort failed with exit_code=' + abort.exit_code.to_string())
+              raise Error('Repository is mid-rebase and could not continue or abort safely.')
+            }
+          }
+
+          raise Error('Repository is mid-rebase with detached HEAD; set allow_rebase_continue or allow_rebase_abort to let Raptor-mini repair it.')
+
+    - alias: reattach_to_branch
+      when: "${{ not detect_git_state.is_symbolic_head and not detect_git_state.mid_rebase }}"
+      action: "runtime.eval"
+      params:
+        expression: |
+          status = ${{ detect_git_state }}
+          params = context.params or {}
+          log.info('RaptorGitFixDetachedHead', 'Detached HEAD at commit ' + status.head_commit + '. Attaching to branch: ' + params.target_branch)
+
+          checkout_res = shell.run('git', ['checkout', params.target_branch], {fail_ok: true})
+          if checkout_res.exit_code != 0 {
+            log.error('RaptorGitFixDetachedHead', 'git checkout ' + params.target_branch + ' failed with exit_code=' + checkout_res.exit_code.to_string() + '. stderr=' + checkout_res.stderr)
+            raise Error('Unable to reattach HEAD to branch ' + params.target_branch + '. Fix manually, then re-run Raptor-mini repair.')
+          }
+
+          head_ref_res3 = shell.run('git', ['symbolic-ref', '--short', 'HEAD'], {fail_ok: true})
+          if head_ref_res3.exit_code != 0 {
+            raise Error('Checkout completed but HEAD is still not symbolic. Manual repair required.')
+          }
+
+          log.info('RaptorGitFixDetachedHead', 'HEAD successfully attached to branch: ' + head_ref_res3.stdout.trim())
+          return { ok: true }
+
+}

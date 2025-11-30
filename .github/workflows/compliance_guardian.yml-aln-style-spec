@@ -9,6 +9,12 @@ workflow:
         branches:
           - "main"
           - "release/*"
+    - workflow_dispatch:
+        inputs:
+          run_staging:
+            description: 'Run the staging validation job'
+            required: false
+            default: 'false'
 
   jobs:
     aln-runner-matrix:
@@ -99,5 +105,50 @@ workflow:
               -e VAULT_TOKEN \
               -e KUBECONFIG \
               -v "${{ github.workspace }}:/workspace" -w /workspace ghcr.io/${{ github.repository }}:aln-runner-${{ github.sha }} ./docker/entrypoint_aln_runner.sh run_prod_tests.aln
+
+    staging-validation:
+      needs: [aln-runner-matrix, security-suite, safe-resolution-validate]
+      runs-on: ubuntu-latest
+      if: github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_staging == 'true')
+        # NOTE: After enabling the 'staging-validation' job in this workflow, please add
+        # 'staging-validation' as a required status check in GitHub branch protection for
+        # the 'staging' branch to prevent bypassing these validations on merges.
+        steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+
+          - name: Build ALN runner image
+            run: |
+              docker build -f docker/Dockerfile.aln-runner -t ide-lab/aln-runner:${{ github.sha }} .
+
+          - name: Run staging validation (prod runtime)
+            env:
+              ALN_RUNTIME: prod
+              ALN_EXEC_MODE: prod
+              GPU_TYPE: "staging-runner"
+              VRAM_GB: "16"
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN_STAGING }}
+              KUBECONFIG: ${{ secrets.KUBECONFIG_STAGING }}
+              VAULT_ADDR: ${{ secrets.VAULT_ADDR_STAGING }}
+              VAULT_TOKEN: ${{ secrets.VAULT_TOKEN_STAGING }}
+              IDE_LAB_ENV: "staging"
+            run: |
+              docker run --rm \
+                -e ALN_RUNTIME \
+                -e ALN_EXEC_MODE \
+                -e GPU_TYPE \
+                -e VRAM_GB \
+                -e GITHUB_TOKEN \
+                -e KUBECONFIG \
+                -e VAULT_ADDR \
+                -e VAULT_TOKEN \
+                -e IDE_LAB_ENV \
+                -v "${{ github.workspace }}:/workspace" \
+                -w /workspace \
+                ide-lab/aln-runner:${{ github.sha }} \
+                ./docker/entrypoint_aln_runner.sh run_prod_tests.aln
+          - name: Branch protection guidance
+            run: |
+              echo "Note: To require this staging-validation job on branch protection, add 'staging-validation' as a required status check in GitHub settings."
 
 # End of ALN-style workflow spec

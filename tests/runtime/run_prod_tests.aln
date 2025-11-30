@@ -1,6 +1,8 @@
 # Run PROD runtime binding tests in a controlled environment
 imports:
   - "./test_prod_runtime_bindings.aln"
+  staging_validation: "../staging/staging_validation_playbook.aln"
+  compat: "../../ide_compat/raptor_mini_compat.aln"
 
 runner:
   name: "prod_runtime_test_runner"
@@ -10,7 +12,16 @@ runner:
         files:
           - "tests/runtime/test_prod_runtime_bindings.aln"
           - "tests/runtime/test_system_exec_wrapper.aln"
+          - "tests/git/test_git_detached_head_guard.aln"
         runtime: "prod"
+    - name: staging_validation_if_staging
+      action: "runtime.eval"
+      params:
+        expression: |
+          # Use raptor compat layer to handle normalization and conditional invocation
+          raptor = compat.raptor_mini_compat.raptor_ci_env()
+          res = compat.raptor_mini_compat.raptor_run_staging_validation({ ci_env: raptor, dry_run: false })
+          return res
     - action: "audit.write_worm_entry"
       params:
         stream: "worm_local"

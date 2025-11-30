@@ -1,0 +1,121 @@
+pipeline STAGING_VALIDATION {
+  params:
+    - name: ci_env
+      type: object
+      optional: true
+    - name: dry_run
+      type: boolean
+      optional: true
+
+  imports {
+    host_policies     : "../../security/windows/windows_hardening.aln"
+    node_policies     : "../../security/windows/windows_node_security.aln"
+    k8s_policies      : "../../security/cluster/k8s_cluster_security.aln"
+    k8s_net_guard     : "../../security/cluster/k8s_network_guard.aln"
+    github_org_pol    : "../../security/github/github_org_security.aln"
+    github_repo_pol   : "../../security/github/github_repo_protection.aln"
+    cluster_profile   : "../../deployment/ide_lab_cluster_profile.aln"
+    policy_kernel     : "../../compliance/matrix/policy_kernel.aln"
+    audit_mod         : "../../schemas/utilities/audit.aln"
+    runtime_ifaces    : "../../runtime/runtime_interfaces.aln"
+  }
+
+  step load_context {
+    action:
+      # Allow passing normalized ci_env from caller; otherwise, fallback to ci_get_env()
+      ci_env   = context.ci_env or ci_get_env()
+      job_meta = ci_get_job_metadata()
+
+      host     = host_get_facts()
+      nodes    = k8s_get_nodes({ scope: "raptor-mini-staging" })
+      netpols  = k8s_get_network_policies({ namespaces: ["raptor-mini", "vault"] })
+      # Fallbacks: ensure ci_env has github_org, github_owner, github_repo
+      if (not ci_env or ci_env.get('github_repo', '') == '') {
+        repo_full = env('GITHUB_REPOSITORY', '')
+        parts = []
+        if (repo_full != '') { parts = repo_full.split('/') }
+        ci_env.github_owner = parts.len() > 0 ? parts[0] : ''
+        ci_env.github_repo  = parts.len() > 1 ? parts[1] : ''
+        ci_env.github_org   = ci_env.github_owner
+      }
+      org_sec  = gh_get_org_settings(ci_env.github_org)
+      repo_sec = gh_get_repo_settings(ci_env.github_owner, ci_env.github_repo)
+  }
+
+  step validate_windows_hardening {
+    action:
+      win_ok   = host_policies.evaluate_hardening(host)
+      node_ok  = node_policies.evaluate_nodes(host, nodes)
+    expect:
+      assert(win_ok == true,  "staging host must satisfy windows_hardening policies")
+      assert(node_ok == true, "staging nodes must satisfy windows_node_security policies")
+  }
+
+  step validate_k8s_security {
+    action:
+      cluster_ok = k8s_policies.evaluate_cluster(nodes, cluster_profile)
+      netpol_ok  = k8s_net_guard.evaluate_netpols(netpols, cluster_profile)
+    expect:
+      assert(cluster_ok == true, "staging cluster must match ide_lab_cluster_profile")
+      assert(netpol_ok == true,  "required NetworkPolicies must be present for raptor-mini and vault")
+  }
+
+  step validate_github_security {
+    action:
+      org_ok  = github_org_pol.evaluate_org(org_sec)
+      repo_ok = github_repo_pol.evaluate_repo(repo_sec)
+    expect:
+      assert(org_ok == true,  "GitHub org security must meet SAFE_RESOLUTION requirements")
+      assert(repo_ok == true, "GitHub repo security must meet SAFE_RESOLUTION requirements")
+  }
+
+  step worm_staging_certification {
+    action:
+      dry_run = context.dry_run or false
+      policy_ver = policy_kernel.POLICY_VERSION
+
+      status = {
+        windows_hardening : win_ok,
+        node_security     : node_ok,
+        cluster_security  : cluster_ok,
+        netpol_security   : netpol_ok,
+        org_security      : org_ok,
+        repo_security     : repo_ok
+      }
+
+      overall_ok = (
+        win_ok   == true &&
+        node_ok  == true &&
+        cluster_ok == true &&
+        netpol_ok  == true &&
+        org_ok   == true &&
+        repo_ok  == true
+      )
+
+      audit_payload = {
+        environment              : "staging",
+        policy_version           : policy_ver,
+        staging_validation_status: overall_ok ? "pass" : "fail",
+        status_breakdown         : status,
+        ci_env                   : {
+          workflow : job_meta.workflow,
+          job      : job_meta.job_name,
+          run_id   : job_meta.run_id,
+          branch   : ci_env.git_ref,
+          commit   : ci_env.git_sha
+        }
+      }
+
+      if not dry_run {
+        audit_mod.write_security_summary("staging_validation", audit_payload)
+      }
+
+    expect:
+      if not dry_run {
+        assert(overall_ok == true, "staging validation must pass for SAFE_RESOLUTION certification")
+      } else {
+        # In dry_run we only check and do not enforce gate
+        assert(true == true, "dry_run: non-blocking")
+      }
+  }
+}

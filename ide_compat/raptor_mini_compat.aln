@@ -1,0 +1,78 @@
+module raptor_mini_compat
+
+imports:
+  - "../runtime/runtime_interfaces.aln"
+  - "../schemas/utilities/audit.aln"
+  - "../compliance/matrix/policy_kernel.aln"
+  - "../tests/staging/staging_validation_playbook.aln"
+
+# Compatibility helpers for Raptor-mini and CI pipelines
+
+functions:
+  - name: raptor_ci_env
+    params: []
+    returns: object
+    impl: |
+      # Normalize CI context into a stable object that routines can rely on
+      ci = ci_get_env() or {}
+      # Environment precedence: env('IDE_LAB_ENV') > ci.environment > 'dev'
+      env_val = env('IDE_LAB_ENV', '') or ci.get('environment', '') or 'dev'
+      # GitHub owner/repo fallback using GITHUB_REPOSITORY
+      owner = ci.get('github_owner', '') or ci.get('github_org', '') or ''
+      repo  = ci.get('github_repo', '') or ''
+      if owner == '' or repo == '':
+        repo_full = env('GITHUB_REPOSITORY', '')
+        if repo_full:
+          parts = repo_full.split('/')
+          owner = owner or (parts.len() > 0 ? parts[0] : '')
+          repo  = repo  or (parts.len() > 1 ? parts[1] : '')
+      # Provide normalized CI metadata
+      return {
+        environment: env_val,
+        github_owner: owner,
+        github_repo: repo,
+        github_org: ci.get('github_org', owner),
+        git_ref: ci.get('git_ref', env('GITHUB_REF', '')), 
+        git_sha: ci.get('git_sha', env('GITHUB_SHA', '')),
+        runner: env('RAPTOR_RUNNER', env('RUNNER_NAME', '')),
+        raw: ci
+      }
+
+  - name: raptor_run_staging_validation
+    params:
+      - name: ci_env
+        type: object
+        optional: true
+      - name: dry_run
+        type: boolean
+        optional: true
+    returns: object
+    impl: |
+      # Run STAGING validation if environment is staging, otherwise skip
+      normalized = context.ci_env or raptor_ci_env()
+      normalized.environment = normalized.environment or 'dev'
+      if normalized.environment == 'staging' {
+        # Accept dry_run to allow invocation in tests
+        dr = context.dry_run or false
+        # Ensure staging validation pipeline is imported and executed
+        try:
+          staging_validation.STAGING_VALIDATION.run({ ci_env: normalized, dry_run: dr })
+          return { ok: true }
+        except e:
+          # Bubble up exceptions to caller
+          raise e
+      } else {
+        # Skipped in non-staging env
+        return { ok: true, skipped: true, reason: 'non-staging environment' }
+      }
+
+# Convenience top-level pipeline to support Raptor-mini single invocation
+pipeline RUNTIME_STAGING_VALIDATION {
+  run:
+    - action: "runtime.eval"
+      params:
+        expression: |
+          ci_env = raptor_mini_compat.raptor_ci_env()
+          result = raptor_mini_compat.raptor_run_staging_validation({ ci_env: ci_env, dry_run: false })
+          return result
+}

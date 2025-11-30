@@ -1,0 +1,7 @@
+imports:
+  - "./git_detached_head_guard.aln"
+
+pipeline RUN_PRINT_HEAD_STATUS {
+  run:
+    - action: "GitDetachedHeadGuard.PRINT_HEAD_STATUS"
+}

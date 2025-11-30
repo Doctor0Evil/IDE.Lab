@@ -1,0 +1,19 @@
+test_suite TEST_FIX_DETACHED_HEAD {
+
+  imports: {
+    fix_mod: "../../ide_compat/git_utils/RaptorGitFixDetachedHead.aln"
+    mock_runtime: "../../schemas/utilities/mock_runtime.aln"
+  }
+
+  test FIX_WHEN_DETACHED_NO_REBASE {
+    setup:
+      # Running this in mock runtime, shell.run will behavior based on mock runtime impl.
+      params = fix_mod.FixParams{ target_branch: 'main', allow_rebase_continue: false, allow_rebase_abort: false }
+    action:
+      res = fix_mod.FIX_DETACHED_HEAD.run({ params: params })
+    expect:
+      # In mock runtime, we didn't craft the shell mock to perform this, so expect success by default
+      assert(res.ok == true, 'Fix pipeline should return ok')
+  }
+
+}

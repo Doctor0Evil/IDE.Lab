@@ -1,0 +1,10 @@
+imports:
+  - "./git_detached_head_guard.aln"
+
+pipeline RUN_PUSH_SAFE {
+  input:
+    params: object
+  run:
+    - action: "GitDetachedHeadGuard.PUSH_SAFE"
+      params:
+        params: "${{params}}"

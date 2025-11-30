@@ -1,0 +1,8 @@
+imports:
+  - "./git_detached_head_guard.aln"
+
+pipeline RUN_PUSH_SAFE_DEFAULT {
+  run:
+    - action: "GitDetachedHeadGuard.PUSH_SAFE"
+      params:
+        params: { remote: "origin", branch: "feature/from-detached", create_branch_if_detached: true, allow_force: false }

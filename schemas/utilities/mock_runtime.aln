@@ -185,10 +185,55 @@ runtime_impl:
           result.stdout = '{"items": [{"metadata":{"name":"node-1"}}]}'
         elif cmd == 'gh':
           result.exit_code = 0
-          result.stdout = '{"sso_enabled":true, "2fa_required":true}'
+           elif len(a) > 0 and a[0] == 'checkout':
         elif cmd == 'vault':
           result.exit_code = 0
           result.stdout = '{"token":"mock-token-handle-1234"}'
+            elif len(a) > 0 and a[0] == 'push':
+              # simulate push success
+              result.exit_code = 0
+              result.stdout = 'To origin ' + (a[2] or '')
+              result.stderr = ''
+            elif len(a) > 0 and a[0] == 'ls-remote':
+              # simulate ls-remote for branch existence
+              # return empty if branch does not exist; otherwise a made-up sha and ref
+              branch = a[2] or ''
+              if branch.find('feature') >= 0 or branch.find('main') >= 0:
+                result.exit_code = 0
+                result.stdout = 'abcdef1234567890\trefs/heads/' + branch
+              else:
+                result.exit_code = 0
+                result.stdout = ''
+        elif cmd == 'git':
+          a = opts.get('args', [])
+          if len(a) > 0 and a[0] == 'symbolic-ref':
+            result.exit_code = 0
+            result.stdout = 'main'
+            result.stderr = ''
+          elif len(a) > 0 and a[0] == 'rev-parse':
+            result.exit_code = 0
+            result.stdout = 'abcdef1234567890'
+            result.stderr = ''
+          elif len(a) > 0 and a[0] == 'checkout':
+            result.exit_code = 0
+            result.stdout = 'Switched to branch ' + (a[1] or '')
+            result.stderr = ''
+          else:
+            result.exit_code = 2
+            result.stderr = 'git: unsupported mock command ' + (a[0] or '')
+        elif cmd == 'bash':
+          a = opts.get('args', [])
+          if len(a) >= 2 and a[0] == '-lc' and 'test -d .git/rebase-merge' in a[1]:
+            result.exit_code = 0
+            result.stdout = 'no'
+            result.stderr = ''
+          elif len(a) >= 2 and a[0] == '-lc' and 'test -d .git/rebase-apply' in a[1]:
+            result.exit_code = 0
+            result.stdout = 'no'
+            result.stderr = ''
+          else:
+            result.exit_code = 2
+            result.stderr = 'bash: unsupported mock command'
         else:
           result.exit_code = 2
           result.stderr = 'command not allowed in mock runtime'

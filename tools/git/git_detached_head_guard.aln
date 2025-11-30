@@ -1,0 +1,304 @@
+module GitDetachedHeadGuard {
+
+  imports: {
+    shell: "../../runtime/utilities/shell_exec.aln",
+    log:   "../../runtime/utilities/log.aln"
+  }
+
+  pipeline PRINT_HEAD_STATUS {
+    run:
+      - alias: show
+        action: "runtime.eval"
+        params:
+          expression: |
+            st = DETECT_HEAD_STATE.state
+            return st
+  }
+
+  pipeline CREATE_BRANCH_FROM_DETACHED_HEAD {
+    input: { new_branch: string }
+    run:
+      - alias: state
+        action: "runtime.eval"
+        params:
+          expression: |
+            st = DETECT_HEAD_STATE.state
+            return st
+
+      - alias: ensure_detached
+        action: "runtime.eval"
+        params:
+          expression: |
+            st = ${{ state }}
+            if st.is_symbolic {
+              raise Error('HEAD is already attached to branch "' + st.branch_name + '". CREATE_BRANCH_FROM_DETACHED_HEAD is only for detached HEAD.')
+            }
+            return { ok: true }
+
+      - alias: create_and_switch
+        action: "runtime.eval"
+        params:
+          expression: |
+            st = ${{ state }}
+            new_branch = context.new_branch or ''
+            log.info('[git] Creating branch "' + new_branch + '" from detached HEAD at ' + st.commit_sha)
+            res = shell.run('bash', ['-lc', 'git checkout -b ' + new_branch], { fail_ok: true })
+            if res.exit_code != 0 {
+              log.error('[git] git checkout -b ' + new_branch + ' failed: ' + res.stderr)
+              raise Error('Failed to create branch "' + new_branch + '" from detached HEAD.')
+            }
+            verify = shell.run('git', ['symbolic-ref', '--short', 'HEAD'], { fail_ok: false })
+            cur = verify.stdout.trim()
+            if cur != new_branch {
+              raise Error('Expected HEAD to be attached to branch "' + new_branch + '" but got "' + cur + '".')
+            }
+            log.info('[git] HEAD now on new branch "' + new_branch + '" at commit ' + st.commit_sha)
+            return { ok: true }
+  }
+
+  struct GitHeadState {
+    is_symbolic: bool,
+    branch_name: string,
+    commit_sha: string,
+    mid_rebase: bool
+  }
+
+  struct RepairParams {
+    target_branch: string,
+    allow_rebase_continue: bool,
+    allow_rebase_abort: bool
+  }
+
+  pipeline DETECT_HEAD_STATE {
+    output:
+      state: GitHeadState
+    run:
+      - alias: symbolic_ref_or_fallback
+        action: "runtime.eval"
+        params:
+          expression: |
+            sym = shell.run('git', ['symbolic-ref', '--short', 'HEAD'], { fail_ok: true })
+            is_sym = sym.exit_code == 0
+            branch = is_sym ? sym.stdout.trim() : ''
+            sha_res = shell.run('git', ['rev-parse', 'HEAD'], { fail_ok: false })
+            sha = sha_res.stdout.trim()
+            reb_merge = shell.run('bash', ['-lc', 'test -d .git/rebase-merge && echo yes || echo no'], { fail_ok: true })
+            reb_apply = shell.run('bash', ['-lc', 'test -d .git/rebase-apply && echo yes || echo no'], { fail_ok: true })
+            mid_rebase = (reb_merge.stdout.trim() == 'yes') || (reb_apply.stdout.trim() == 'yes')
+            state = GitHeadState{ is_symbolic: is_sym, branch_name: branch, commit_sha: sha, mid_rebase: mid_rebase }
+            if state.is_symbolic {
+              log.info('[git] HEAD attached to branch ' + state.branch_name + ' @ ' + state.commit_sha)
+            } else if state.mid_rebase {
+              log.warn('[git] DETACHED HEAD (mid-rebase) @ ' + state.commit_sha)
+            } else {
+              log.warn('[git] DETACHED HEAD (no branch) @ ' + state.commit_sha)
+            }
+            state = state
+            return state
+  }
+
+  pipeline REPAIR_DETACHED_HEAD {
+    input: { params: RepairParams }
+    run:
+      - alias: read_state
+        action: "runtime.eval"
+        params:
+          expression: |
+            st = DETECT_HEAD_STATE.state
+            # For debugging, still log read_state
+            sym = shell.run('git', ['symbolic-ref', '--short', 'HEAD'], { fail_ok: true })
+            is_sym = sym.exit_code == 0
+            branch = is_sym ? sym.stdout.trim() : ''
+            sha_res = shell.run('git', ['rev-parse', 'HEAD'], { fail_ok: false })
+            sha = sha_res.stdout.trim()
+            reb_merge = shell.run('bash', ['-lc', 'test -d .git/rebase-merge && echo yes || echo no'], { fail_ok: true })
+            reb_apply = shell.run('bash', ['-lc', 'test -d .git/rebase-apply && echo yes || echo no'], { fail_ok: true })
+            mid_rebase = (reb_merge.stdout.trim() == 'yes') || (reb_apply.stdout.trim() == 'yes')
+            state = GitHeadState{ is_symbolic: st.is_symbolic, branch_name: st.branch_name, commit_sha: st.commit_sha, mid_rebase: st.mid_rebase }
+            log.info('[git] Git HEAD state: symbolic=' + state.is_symbolic.to_string() + ' branch=' + state.branch_name + ' sha=' + state.commit_sha + ' mid_rebase=' + state.mid_rebase.to_string())
+            return state
+
+      - alias: exit_if_healthy
+        action: "runtime.eval"
+        params:
+          expression: |
+            state = ${{ read_state }}
+            if state.is_symbolic and not state.mid_rebase {
+              log.info('GitDetachedHeadGuard', 'HEAD is attached and no rebase in progress. No repair.')
+              return { ok: true }
+            }
+            return { ok: false }
+
+      - alias: handle_mid_rebase
+        action: "runtime.eval"
+        params:
+          expression: |
+            state = ${{ read_state }}
+            params = context.params or {}
+            if not state.mid_rebase {
+              return { ok: false }
+            }
+            log.warn('GitDetachedHeadGuard', 'Repository is mid-rebase with HEAD at ' + state.commit_sha)
+            if params.allow_rebase_continue {
+              cont = shell.run('git', ['rebase', '--continue'], { fail_ok: true })
+              if cont.exit_code == 0 {
+                log.info('GitDetachedHeadGuard', 'git rebase --continue succeeded. Re-evaluating HEAD.')
+                sym2 = shell.run('git', ['symbolic-ref', '--short', 'HEAD'], { fail_ok: true })
+                if sym2.exit_code == 0 {
+                  log.info('GitDetachedHeadGuard', 'HEAD attached to branch: ' + sym2.stdout.trim())
+                  return { ok: true }
+                }
+              } else {
+                log.warn('GitDetachedHeadGuard', 'git rebase --continue failed with exit_code=' + cont.exit_code.to_string())
+              }
+            }
+            if params.allow_rebase_abort {
+              abort = shell.run('git', ['rebase', '--abort'], { fail_ok: true })
+              if abort.exit_code == 0 {
+                log.info('GitDetachedHeadGuard', 'git rebase --abort succeeded. Attempting branch checkout: ' + params.target_branch)
+                co = shell.run('git', ['checkout', params.target_branch], { fail_ok: true })
+                if co.exit_code != 0 {
+                  log.error('GitDetachedHeadGuard', 'git checkout ' + params.target_branch + ' failed with exit_code=' + co.exit_code.to_string() + ' stderr=' + co.stderr)
+                  raise Error('Rebase aborted, but checkout of target branch failed.')
+                }
+                sym3 = shell.run('git', ['symbolic-ref', '--short', 'HEAD'], { fail_ok: true })
+                if sym3.exit_code == 0 {
+                  log.info('GitDetachedHeadGuard', 'HEAD attached to branch: ' + sym3.stdout.trim())
+                  return { ok: true }
+                } else {
+                  raise Error('Rebase aborted and branch checkout run, but HEAD is still not symbolic.')
+                }
+              } else {
+                log.error('GitDetachedHeadGuard', 'git rebase --abort failed with exit_code=' + abort.exit_code.to_string())
+                raise Error('Mid-rebase and unable to continue or abort safely. Manual intervention required.')
+              }
+            }
+            raise Error('Mid-rebase detached HEAD; enable allow_rebase_continue or allow_rebase_abort for automated repair.')
+
+      - alias: checkout_target_branch
+        action: "runtime.eval"
+        params:
+          expression: |
+            state = ${{ read_state }}
+            params = context.params or {}
+            log.warn('GitDetachedHeadGuard', 'Detached HEAD (no rebase) at ' + state.commit_sha + '. Attaching to branch ' + params.target_branch)
+            co2 = shell.run('git', ['checkout', params.target_branch], { fail_ok: true })
+            if co2.exit_code != 0 {
+              log.error('GitDetachedHeadGuard', 'git checkout ' + params.target_branch + ' failed with exit_code=' + co2.exit_code.to_string() + ' stderr=' + co2.stderr)
+              raise Error('Failed to attach detached HEAD to target branch ' + params.target_branch)
+            }
+            sym4 = shell.run('git', ['symbolic-ref', '--short', 'HEAD'], { fail_ok: true })
+            if sym4.exit_code != 0 {
+              raise Error('Branch checkout succeeded but HEAD is still not symbolic.')
+            }
+            log.info('GitDetachedHeadGuard', 'HEAD successfully attached to branch: ' + sym4.stdout.trim())
+            return { ok: true }
+  }
+
+  // Push safely: repair detached head, attach to target branch, and perform push with FF checks
+  pipeline PUSH_SAFE {
+    input: {
+      params: object
+    }
+    run:
+      - alias: prep_state
+        action: "runtime.eval"
+        params:
+          expression: |
+            st = DETECT_HEAD_STATE.state
+            params = context.params or {}
+            # Normalize inputs
+            remote = params.get('remote', 'origin')
+            branch = params.get('branch', '')
+            create_branch_if_detached = params.get('create_branch_if_detached', false)
+            allow_force = params.get('allow_force', false)
+            return { st: st, remote: remote, branch: branch, create_branch_if_detached: create_branch_if_detached, allow_force: allow_force }
+
+      - alias: fix_if_needed
+        action: "runtime.eval"
+        params:
+          expression: |
+            p = ${{ prep_state }}
+            st = p.st
+            remote = p.remote
+            branch = p.branch
+            create_branch_if_detached = p.create_branch_if_detached
+            # If detached, either create branch or attach to provided target
+            if not st.is_symbolic {
+              if create_branch_if_detached and branch != '' {
+                # Create branch from detached head
+                res = shell.run('bash', ['-lc', 'git checkout -b ' + branch], { fail_ok: true })
+                if res.exit_code != 0 {
+                  raise Error('Failed to create branch ' + branch + ' from detached HEAD: ' + res.stderr)
+                }
+                st = DETECT_HEAD_STATE.state
+              } else if branch != '' {
+                # Try to checkout provided branch (may create or use existing)
+                res = shell.run('bash', ['-lc', 'git checkout ' + branch], { fail_ok: true })
+                if res.exit_code != 0 {
+                  raise Error('Failed to checkout branch ' + branch + ' from detached HEAD: ' + res.stderr)
+                }
+                st = DETECT_HEAD_STATE.state
+              } else {
+                raise Error('Detached HEAD and no target branch provided (create_branch_if_detached=false)')
+              }
+            }
+            return { st: st, remote: remote, branch: branch }
+
+      - alias: decide_and_push
+        action: "runtime.eval"
+        params:
+          expression: |
+            ctx = ${{ fix_if_needed }}
+            st = ctx.st
+            remote = ctx.remote
+            branch = ctx.branch
+            # If branch empty, use current head branch
+            if branch == '' {
+              branch = st.branch_name
+            }
+            # Ensure we're on the branch
+            cur = shell.run('git', ['symbolic-ref', '--short', 'HEAD'], { fail_ok: true })
+            if cur.exit_code != 0 {
+              raise Error('Expected symbolic head before push; got detached')
+            }
+            cur_branch = cur.stdout.trim()
+            if cur_branch != branch {
+              # Try to checkout
+              co = shell.run('git', ['checkout', branch], { fail_ok: true })
+              if co.exit_code != 0 {
+                raise Error('Failed to checkout branch ' + branch + ' before push: ' + co.stderr)
+              }
+            }
+            local_sha = shell.run('git', ['rev-parse', 'HEAD'], { fail_ok: false }).stdout.trim()
+            remote_sha_res = shell.run('bash', ['-lc', 'git ls-remote ' + remote + ' refs/heads/' + branch], { fail_ok: true })
+            remote_sha_out = remote_sha_res.stdout.trim()
+            remote_sha = ''
+            if remote_sha_out != '' {
+              remote_sha = remote_sha_out.split('\t')[0]
+            }
+            if remote_sha == '' {
+              # Push new branch to remote
+              push_cmd = ['git', 'push', remote, branch]
+              push_res = shell.run('git', ['push', remote, branch], { fail_ok: true })
+              return { push_exit: push_res.exit_code, push_stdout: push_res.stdout, push_stderr: push_res.stderr }
+            }
+            # Check ancestry: is remote ancestor of local?
+            ancestor_check = shell.run('git', ['merge-base', '--is-ancestor', remote_sha, local_sha], { fail_ok: true })
+            if ancestor_check.exit_code == 0 {
+              # Fast-forward push is safe
+              push_res = shell.run('git', ['push', remote, branch], { fail_ok: true })
+              return { push_exit: push_res.exit_code, push_stdout: push_res.stdout, push_stderr: push_res.stderr }
+            } else {
+              # Non-fast-forward
+              pctx = context.params or {}
+              allow_force = pctx.get('allow_force', false)
+              if allow_force {
+                push_res = shell.run('git', ['push', '--force', remote, branch], { fail_ok: true })
+                return { push_exit: push_res.exit_code, push_stdout: push_res.stdout, push_stderr: push_res.stderr, forced: true }
+              }
+              raise Error('Remote branch is not an ancestor of local HEAD; push would be non-fast-forward. Set allow_force=true to force.')
+            }
+  }
+
+}

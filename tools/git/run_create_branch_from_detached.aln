@@ -1,0 +1,10 @@
+imports:
+  - "./git_detached_head_guard.aln"
+
+pipeline RUN_CREATE_BRANCH_FROM_DETACHED {
+  input:
+    new_branch: string
+  run:
+    - action: "GitDetachedHeadGuard.CREATE_BRANCH_FROM_DETACHED_HEAD"
+      params:
+        new_branch: "${{params.new_branch}}"

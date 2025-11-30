@@ -1,0 +1,144 @@
+module TestGitDetachedHeadGuard {
+
+  imports: {
+    shell: "../../runtime/utilities/shell_exec.aln",
+    log:   "../../runtime/utilities/log.aln",
+    guard: "../../tools/git/git_detached_head_guard.aln"
+  }
+
+  pipeline RUN_TESTS {
+    run:
+      - alias: setup_temp_repo
+        action: "runtime.eval"
+        params:
+          expression: |
+            tmp_dir_res = shell.run('mktemp', ['-d'], { fail_ok: false })
+            tmp_dir = tmp_dir_res.stdout.trim()
+            log.info('TestGitDetachedHeadGuard', 'Using temp git repo at: ' + tmp_dir)
+            init_cmd = [ 'bash', '-lc', 'cd ' + tmp_dir + ' && git init && echo "test" > file.txt && git add file.txt && git commit -m "init"' ]
+            init_res = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && git init && echo "test" > file.txt && git add file.txt && git commit -m "init"' ], { fail_ok: false })
+            if init_res.exit_code != 0 {
+              raise Error('Failed to initialize temp git repo.')
+            }
+            # Create a bare remote repository and add as origin
+            remote_dir_res = shell.run('mktemp', ['-d'], { fail_ok: false })
+            remote_dir = remote_dir_res.stdout.trim()
+            bare_init = shell.run('bash', ['-lc', 'git init --bare ' + remote_dir], { fail_ok: false })
+            if bare_init.exit_code != 0 {
+              raise Error('Failed to initialize bare remote')
+            }
+            add_remote = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && git remote add origin ' + remote_dir], { fail_ok: false })
+            if add_remote.exit_code != 0 {
+              raise Error('Failed to add remote origin: ' + add_remote.stderr)
+            }
+            # Create main branch and push to origin
+            create_main = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && git checkout -b main && git push -u origin main'], { fail_ok: true })
+            if create_main.exit_code != 0 {
+              log.warn('TestGitDetachedHeadGuard', 'Initial push to origin main failed: ' + create_main.stderr)
+            }
+            return { tmp_dir: tmp_dir, origin: remote_dir }
+
+      - alias: simulate_detached_head
+        action: "runtime.eval"
+        params:
+          expression: |
+            tmp_dir = ${{ setup_temp_repo.tmp_dir }}
+            detach_cmd = 'bash -lc "cd ' + tmp_dir + ' && COMMIT=$(git rev-parse HEAD) && git checkout $COMMIT"'
+            det_res = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && COMMIT=$(git rev-parse HEAD) && git checkout $COMMIT'], { fail_ok: false })
+            if det_res.exit_code != 0 {
+              raise Error('Failed to simulate detached HEAD.')
+            }
+            return { tmp_dir: tmp_dir }
+
+      - alias: test_print_head_status
+        action: "runtime.eval"
+        params:
+          expression: |
+            tmp_dir = ${{ setup_temp_repo.tmp_dir }}
+            print_cmd = 'bash -lc "cd ' + tmp_dir + ' && /workspace/docker/entrypoint_aln_runner.sh /workspace/tools/git/run_print_head_status.aln"'
+            print_res = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && /workspace/docker/entrypoint_aln_runner.sh /workspace/tools/git/run_print_head_status.aln'], { fail_ok: true })
+            if print_res.exit_code != 0 {
+              raise Error('PRINT_HEAD_STATUS failed in detached HEAD test.')
+            }
+            return { tmp_dir: tmp_dir }
+
+      - alias: test_repair_detached_head_no_rebase
+        action: "runtime.eval"
+        params:
+          expression: |
+            tmp_dir = ${{ setup_temp_repo.tmp_dir }}
+            # For this test, the 'main' branch already exists; ensure it's present and push to origin
+            branch_res = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && git branch --show-current || git checkout -b main'], { fail_ok: true })
+            if branch_res.exit_code != 0 {
+              raise Error('Failed to create main branch in temp repo.')
+            }
+            # Detach again
+            det_cmd2 = 'bash -lc "cd ' + tmp_dir + ' && COMMIT=$(git rev-parse HEAD) && git checkout $COMMIT"'
+            det2_res = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && COMMIT=$(git rev-parse HEAD) && git checkout $COMMIT'], { fail_ok: false })
+            if det2_res.exit_code != 0 {
+              raise Error('Failed to re-create detached HEAD.')
+            }
+            # Run repair pipeline to reattach to main; use prod runner since this makes system git calls
+            # Call the ALN wrapper which runs REPAIR_DETACHED_HEAD pipeline with main as target
+            guard_cmd = 'bash -lc "cd ' + tmp_dir + ' && /workspace/docker/entrypoint_aln_runner.sh /workspace/tools/git/run_repair_detached_head_run.aln"'
+            guard_res = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && /workspace/docker/entrypoint_aln_runner.sh /workspace/tools/git/run_repair_detached_head_run.aln' ], { fail_ok: true })
+            if guard_res.exit_code != 0 {
+              raise Error('REPAIR_DETACHED_HEAD failed to attach to main in non-rebase scenario.')
+            }
+            # Verify symbolic HEAD
+            verify = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && git symbolic-ref --short HEAD'], { fail_ok: false })
+            if verify.stdout.trim() != 'main' {
+              raise Error('Expected HEAD to be attached to branch "main" after repair, got: ' + verify.stdout.trim())
+            }
+            # Ensure main exists on remote
+            local_sha = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && git rev-parse HEAD'], { fail_ok: false }).stdout.trim()
+            lsrem = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && git ls-remote origin refs/heads/main'], { fail_ok: false })
+            if lsrem.stdout.trim() == '' {
+              log.warn('TestGitDetachedHeadGuard', 'Remote origin does not have main branch yet.')
+            } else {
+              if !lsrem.stdout.trim().contains(local_sha) {
+                raise Error('Remote origin main commit differs; expected local commit ' + local_sha + ' found ' + lsrem.stdout.trim())
+              }
+            }
+            return { tmp_dir: tmp_dir }
+
+      - alias: test_push_safe_from_detached
+        action: "runtime.eval"
+        params:
+          expression: |
+            tmp_dir = ${{ setup_temp_repo.tmp_dir }}
+            origin = ${{ setup_temp_repo.origin }}
+            # Create a new detached commit, then create a branch and push it via our push safe wrapper
+            # Create a commit on detached HEAD
+            shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && echo "more" >> file.txt && git add file.txt && git commit -m "more"'], { fail_ok: false })
+            # Detach
+            shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && COMMIT=$(git rev-parse HEAD) && git checkout $COMMIT'], { fail_ok: false })
+            # Run create branch wrapper to create feature/branch-from-detached
+            create_res = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && /workspace/docker/entrypoint_aln_runner.sh /workspace/tools/git/run_create_branch_from_detached_default.aln' ], { fail_ok: true })
+            if create_res.exit_code != 0 {
+              raise Error('CREATE_BRANCH_FROM_DETACHED_HEAD failed: ' + create_res.stderr)
+            }
+            # Push via wrapper (safe push)
+            push_res = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && /workspace/docker/entrypoint_aln_runner.sh /workspace/tools/git/run_push_safe_default.aln' ], { fail_ok: true })
+            if push_res.exit_code != 0 {
+              raise Error('PUSH_SAFE failed: ' + push_res.stderr)
+            }
+            # Verify remote now has the branch
+            ls2 = shell.run('bash', ['-lc', 'cd ' + tmp_dir + ' && git ls-remote origin refs/heads/feature/from-detached'], { fail_ok: false })
+            if ls2.stdout.trim() == '' {
+              raise Error('Expected origin to have feature/from-detached after push, but not found.')
+            }
+            return { ok: true }
+
+      - alias: cleanup
+        action: "runtime.eval"
+        params:
+          expression: |
+            tmp_dir = ${{ setup_temp_repo.tmp_dir }}
+            cleanup_res = shell.run('bash', ['-lc','rm -rf ' + tmp_dir], { fail_ok: true })
+            if cleanup_res.exit_code != 0 {
+              log.warn('TestGitDetachedHeadGuard', 'Failed to remove temp repo at ' + tmp_dir + ' (non-fatal).')
+            }
+            return { ok: true }
+  }
+}

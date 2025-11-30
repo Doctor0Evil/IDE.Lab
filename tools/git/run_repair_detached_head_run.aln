@@ -1,0 +1,9 @@
+imports:
+  - "./git_detached_head_guard.aln"
+
+pipeline RUN_REPAIR_DETACHED_HEAD {
+  run:
+    - action: "GitDetachedHeadGuard.REPAIR_DETACHED_HEAD"
+      params:
+        params: { target_branch: "main", allow_rebase_continue: false, allow_rebase_abort: false }
+}

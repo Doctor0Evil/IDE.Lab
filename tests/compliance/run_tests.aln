@@ -34,6 +34,7 @@ runner:
           - "tests/security/test_ci_docker_guard.aln"
           - "tests/security/test_ide_lab_cluster_profile.aln"
           - "tests/runtime/test_system_exec_wrapper.aln"
+          - "tests/ide_compat/test_fix_detached_head.aln"
           - "cicd/hooks/security_automation_suite.aln"
         runtime: "mock"
     - action: "audit.write_worm_entry"

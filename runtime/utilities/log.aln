@@ -1,0 +1,27 @@
+# Log helper wrapper (convenience)
+
+exports:
+  - name: info
+    params:
+      - name: tag
+        type: string
+      - name: message
+        type: string
+    impl: |
+      log.info(tag, message)
+  - name: warn
+    params:
+      - name: tag
+        type: string
+      - name: message
+        type: string
+    impl: |
+      log.warn(tag, message)
+  - name: error
+    params:
+      - name: tag
+        type: string
+      - name: message
+        type: string
+    impl: |
+      log.error(tag, message)
