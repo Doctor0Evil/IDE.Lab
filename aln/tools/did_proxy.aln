@@ -16,6 +16,13 @@ module tools.did_proxy {
     // Request a CI capability from the configured DID proxy.
     fn request_ci_capability(pipeline: string, branch: string) -> CiCapability {
         let proxy_url = env.get("DID_PROXY_URL");
+        let mock_mode = env.get("DID_PROXY_MOCK");
+        if (mock_mode == "true") {
+            // Use the mock generator for tests
+            import tools.did_proxy_mock;
+            let cap = did_proxy_mock.generate_mock_capability();
+            return CiCapability { value: cap.value, expires_at: cap.expires_at, scope: cap.scope };
+        }
         if (proxy_url == "") {
             log.error("did_proxy", "DID_PROXY_URL env var not set; cannot get CI capability");
             return CiCapability { value: "", expires_at: "", scope: "" };

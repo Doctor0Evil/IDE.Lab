@@ -39,6 +39,17 @@ Ensure your DID proxy responds with JSON like:
 }
 ```
 
+## Mock mode for CI demos
+Use the `did-proxy-mock.yml` workflow to validate DID tokenless flows in CI without external network calls.
+
+1. The mock workflow sets:
+	- `DID_PROXY_MOCK=true`
+	- `DID_PROXY_URL=mock://ci`
+2. `aln run tools.did_proxy` will use the local mock generator to return a deterministic capability JSON; this avoids external network calls and proves the capability exchange flow.
+3. For demos, the mock capability uses the scope `github:repo:IDE.Lab:ci:test` and a short expiry (5 minutes).
+
+This mock mode is for demonstration and reviewer validation only; real deployments must use a secure DID proxy with DID proof verification and proper audit logs.
+
 Example CI wiring
 1. Runner obtains DID token (did-jwt) from the local agent.
 2. Runner posts assertion to your DID proxy to obtain one-shot token.
