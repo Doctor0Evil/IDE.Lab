@@ -8,7 +8,6 @@
 
 <img src="https://r2cdn.perplexity.ai/pplx-full-logo-primary-dark%402x.png" style="height:64px;margin-right:32px"/>
 
-Here is a rewritten README for IDE.Lab that clearly presents its purpose and structure while emphasizing its blockchain-based ALN programming language and Web5 alternative DID credentials focus:
 
 ***
 
