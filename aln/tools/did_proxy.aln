@@ -1,0 +1,30 @@
+module tools.did_proxy {
+    import std.log;
+    import std.proc;
+    import std.env;
+
+    // This is a minimal scaffold for a DID-based auth agent used by CI.
+    // Real key storage, signing, and DID agent interactions are external.
+
+    // Request a JWT or short-lived session for CI operations.
+    // This module should call your DID agent or pass-through proxy which returns a one-shot token.
+    fn request_ci_token(repo: string, branch: string, scope: string) -> string {
+        // In CI, the runner would call an external DID agent or proxy.
+        // For demo/testing, this returns a placeholder string or environment-provided test token.
+        let proxyUrl = env.get("DID_PROXY_URL");
+        if (proxyUrl == "") {
+            log.warn("tools.did_proxy", "DID_PROXY_URL not provided; using placeholder token");
+            return "placeholder-ci-token";
+        }
+
+        // In a real system, you would call a secure proxy endpoint using an HTTP client and a DID agent.
+        // We avoid network calls inside this scaffold; instead, CI should set DID_PROXY_URL and call the proxy directly.
+        log.info("tools.did_proxy", "DID proxy integration expected: " + proxyUrl);
+        return "didsession://request-token-placeholder";
+    }
+
+    export fn main() -> i32 {
+        log.info("tools.did_proxy", "DID proxy scaffold loaded; set DID_PROXY_URL in CI to the proxy endpoint.");
+        return 0;
+    }
+}
