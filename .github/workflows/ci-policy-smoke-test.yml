@@ -6,7 +6,7 @@ on:
 
 jobs:
   policy-smoke-test:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, aln-no-python ]
     env:
       DID_PROXY_MOCK: "true"
       DID_PROXY_URL: "mock://ci"
@@ -31,6 +31,10 @@ jobs:
       - name: Run policy enforcement and audit demo
         run: |
           aln run ci.core
+
+      - name: Run Raptor QoS validation test
+        run: |
+          aln test --filter raptor_qos_validation --report junit:reports/raptor-qos-validation.xml
 
       - name: Assert policy succeeded and audit created
         run: |
