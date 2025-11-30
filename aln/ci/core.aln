@@ -2,6 +2,8 @@ module ci.core {
     import std.fs;
     import std.proc;
     import std.log;
+    import std.env;
+    import tools.did_proxy;
 
     contract Step {
         fn name() -> string;
@@ -63,7 +65,22 @@ module ci.core {
         };
     }
 
+    fn prepare_ci_session() -> int {
+        let branch = env.get("GITHUB_REF_NAME");
+        if (branch == "") { branch = "local"; }
+        let cap = did_proxy.request_ci_capability("aln-ci-core", branch);
+        if (cap.value == "") {
+            log.error("ci", "failed to obtain DID-based CI capability; aborting");
+            return 1;
+        }
+        // Optionally set environment variable for downstream steps (not logged)
+        // In real workflows we may use secrets or a secure context to pass the temporary capability safely
+        return 0;
+    }
+
     fn run_pipeline() -> int {
+        let rc = prepare_ci_session();
+        if (rc != 0) { return rc; }
         let steps: Step[] = [
             step_checkout(),
             step_deps(),

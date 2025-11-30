@@ -1,3 +1,6 @@
+Keep this document public; do not place keys or secrets in repository files.
+
+## How to wire the DID proxy in CI
 # DID/Web5 Tokenless CI – Overview
 
 This document describes how to adopt a tokenless, DID/Web5-based approach for CI automation in the IDE.Lab repository.
@@ -21,6 +24,20 @@ Implementation notes
 
 ALN adaptor
 - A minimal ALN scaffold `aln/tools/did_proxy.aln` provides a placeholder abstraction. Replace the `request_ci_token` function with calls to your DID agent proxy.
+
+## How to wire the DID proxy in CI
+- In `.github/workflows/aln-ci-core.yml` add a job-level env var `DID_PROXY_URL` pointing to your DID proxy endpoint (non-secret).
+- Ensure the DID proxy validates requests and returns a one-shot `capability` JSON value.
+- Call `aln run ci.core`, which internally calls `tools.did_proxy.request_ci_capability` before performing sensitive operations.
+
+Ensure your DID proxy responds with JSON like:
+```
+{
+	"capability": "<opaque-value>",
+	"expires_at": "2025-12-01T10:00:00Z",
+	"scope": "github:repo:IDE.Lab:ci"
+}
+```
 
 Example CI wiring
 1. Runner obtains DID token (did-jwt) from the local agent.

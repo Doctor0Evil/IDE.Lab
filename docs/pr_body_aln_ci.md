@@ -70,3 +70,8 @@ What changed
 Security note (for reviewers)
 - This PR does not introduce any GitHub PATs or Secrets.
 - Future automation (e.g., auto-PR bots) should integrate with the organization Web5 DID and DID-based authorization (did:ion:EiD8J2b3K8k9Q8x9L7m2n4p1q5r6s7t8u9v0w1x2y3z4A5B6C7D8E9F0) instead of storing tokens in GitHub.
+
+## DID/Web5 tokenless CI wiring
+This repo includes `aln/tools/did_proxy.aln` as a safe ALN-first stub for DID-based automation.
+- Ensure `DID_PROXY_URL` is configured in `.github/workflows/aln-ci-core.yml` job-level env (or repo variables).
+- The DID proxy should return a JSON capability object; ALN modules use this capability to call backend proxies for GitHub operations without embedding PATs into the repo.

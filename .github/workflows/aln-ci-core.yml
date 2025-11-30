@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ALN_DIR: aln
+      DID_PROXY_URL: "https://did-proxy.example.org/ci/issue" # Replace with your DID proxy URL or repo variable
     steps:
       - name: Checkout
         uses: actions/checkout@v4
