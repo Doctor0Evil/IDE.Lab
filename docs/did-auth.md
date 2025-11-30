@@ -61,3 +61,49 @@ Security considerations
 - Least privilege: Token only permits necessary operations (post a comment, create a PR, limited to certain labels or checks).
 
 This server-side DID-based approach keeps sensitive key material outside GitHub while enabling automation similar to PAT-based flows without static secrets.
+
+## Enabling a real DID proxy in production
+Follow these steps to move from the mock demo to a secure production DID proxy.
+
+1) Requirements & architecture
+- DID agent: your organization's DID agent must be able to sign a DID-JWT or issue a Verifiable Credential (VC) proving the runner is authorized for CI duties.
+- DID proxy: a hardened backend service that verifies DID proofs and issues short-lived CI capabilities; logs and audits requests; optionally uses mTLS.
+- Backend GitHub access: the proxy backend may hold a minimal credential and act as a gateway for limited GitHub API calls; these credentials are not stored in GitHub Secrets.
+
+2) Environment variables & repo wiring
+- `DID_PROXY_URL` (repo variable, non-secret): `https://did-proxy.example.org/ci/issue`
+- `DID_PROXY_MTLS_CA` (repo secret or provider-managed, optional): CA certificate for validating proxy mTLS connections.
+- `ORG_DID` (public DID in repo or config): e.g., `did:ion:EiD...` (public DID doc, not private key material).
+
+3) Proxy API contract (expected input)
+- POST JSON body with fields: `did`, `pipeline`, `branch`, `runner_id`, `requested_at`, and a DID-JWT proof under `proof` or via mTLS client cert.
+
+4) Proxy response (expected output)
+- The proxy must return a JSON object with fields:
+	```json
+	{
+		"capability": "<opaque-value>",
+		"expires_at": "2025-12-01T10:00:00Z",
+		"scope": "github:repo:IDE.Lab:ci"
+	}
+	```
+
+5) Proxy security & policies
+- Token TTL: Keep TTLs short (few minutes) and bind tokens to `repo` + `branch` + `jobid`.
+- Revocation: Proxy must allow immediate revocation and maintain audit logs of requests with `did` and `runner_id`.
+- Auditing: All capability issues and downstream GitHub calls routed via the proxy must be logged for later review.
+- Least privilege: Proxy must limit operations (e.g., PR comment, label, or status update) based on the requested `scope`.
+- mTLS & DID-JWT: Prefer mTLS or DID-JWT-based authenticated channels to the proxy; do not rely on long-lived secrets in repo settings.
+
+6) ALN wiring in production
+- In the ALN pipeline (`aln/ci/core.aln`), call `tools.did_proxy.request_ci_capability(...)` at job start; treat it as a gating step that must return a non-empty `capability`.
+- Use the capability only by passing it to trusted backend services or by setting an ephemeral environment variable for subsequent internal steps; do not log the capability value.
+
+7) Dev & local testing
+- Keep `DID_PROXY_MOCK` and the mock workflow for PR demos. Replace the mocked capability with the real DID proxy endpoint for integration testing, using ephemeral test proxies and short-lived credentials.
+
+8) Implementation notes for maintainers
+- Implement CI-side retries and clear error messages if the proxy is not reachable or the proof validation fails.
+- Keep the DID root and keys off-platform in a secure KMS or an HSM-backed DID agent; use a trusted operator to sign and issue VCs for runners.
+
+This section is a practical, production-ready reference for enabling the DID proxy securely and transitioning from mock demos to live CI tokenless flows.
