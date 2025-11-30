@@ -1,0 +1,159 @@
+module tools.raptor_qos {
+    import std.json;
+    import std.fs;
+    import std.env;
+    import std.log;
+    import std.time;
+
+    struct QosInputs {
+        active_devs: int;
+        mean_latency_s: float;
+        concurrency: int;
+        rho_max: float;
+
+        ctx_tokens: int;
+        alpha: float;
+        inst_tokens: int;
+        meta_tokens: int;
+        code_min_tokens: int;
+
+        L_norm: float;
+        E_norm: float;
+        F_norm: float;
+        beta_L: float;
+        beta_E: float;
+        beta_F: float;
+
+        lambda_intent: float;
+        n_max_batch: float;
+        Tw: float;
+        k_bucket: float;
+    }
+
+    struct QosOutputs {
+        Ri_max: float;
+        token_rate_r: float;
+        bucket_B: float;
+        T_code_star: int;
+        qos_Q: float;
+        Dt_min: float;
+        Dt_max: float;
+    }
+
+    export fn load_policy() -> QosInputs {
+        let path = env.get("RAPTOR_QOS_POLICY_PATH", "configs/raptor_qos_policy.json");
+        if !fs.exists(path) {
+            log.warn("raptor_qos", "policy file not found at " + path + ", using defaults");
+            return QosInputs {
+                active_devs: 10,
+                mean_latency_s: 1.0,
+                concurrency: 16,
+                rho_max: 0.7,
+
+                ctx_tokens: 32768,
+                alpha: 0.8,
+                inst_tokens: 1024,
+                meta_tokens: 512,
+                code_min_tokens: 4096,
+
+                L_norm: 0.3,
+                E_norm: 0.05,
+                F_norm: 0.02,
+                beta_L: 0.4,
+                beta_E: 0.4,
+                beta_F: 0.2,
+
+                lambda_intent: 0.5,
+                n_max_batch: 5.0,
+                Tw: 5.0,
+                k_bucket: 3.0,
+            };
+        }
+
+        let data = fs.read_all_text(path);
+        let j = json.parse(data);
+
+        return QosInputs {
+            active_devs: j.get_int("active_devs", 10),
+            mean_latency_s: j.get_float("mean_latency_s", 1.0),
+            concurrency: j.get_int("concurrency", 16),
+            rho_max: j.get_float("rho_max", 0.7),
+
+            ctx_tokens: j.get_int("ctx_tokens", 32768),
+            alpha: j.get_float("alpha", 0.8),
+            inst_tokens: j.get_int("inst_tokens", 1024),
+            meta_tokens: j.get_int("meta_tokens", 512),
+            code_min_tokens: j.get_int("code_min_tokens", 4096),
+
+            L_norm: j.get_float("L_norm", 0.3),
+            E_norm: j.get_float("E_norm", 0.05),
+            F_norm: j.get_float("F_norm", 0.02),
+            beta_L: j.get_float("beta_L", 0.4),
+            beta_E: j.get_float("beta_E", 0.4),
+            beta_F: j.get_float("beta_F", 0.2),
+
+            lambda_intent: j.get_float("lambda_intent", 0.5),
+            n_max_batch: j.get_float("n_max_batch", 5.0),
+            Tw: j.get_float("Tw", 5.0),
+            k_bucket: j.get_float("k_bucket", 3.0),
+        };
+    }
+
+    export fn compute_qos(inp: QosInputs) -> QosOutputs {
+        let mu = 1.0 / inp.mean_latency_s;
+        let Ri_max = (inp.rho_max * (inp.concurrency as float) * mu) / (inp.active_devs as float);
+
+        let r = Ri_max;
+        let B = inp.k_bucket * r * inp.Tw;
+
+        let T_code_star_f = inp.alpha * (inp.ctx_tokens as float)
+                            - (inp.inst_tokens as float + inp.meta_tokens as float);
+        let mut T_code_star = T_code_star_f as int;
+        if T_code_star < inp.code_min_tokens {
+            T_code_star = inp.code_min_tokens;
+        }
+
+        let mut sum_beta = inp.beta_L + inp.beta_E + inp.beta_F;
+        if sum_beta > 1.0 {
+            sum_beta = 1.0;
+        }
+        let Q = 1.0 - (inp.beta_L * inp.L_norm
+                       + inp.beta_E * inp.E_norm
+                       + inp.beta_F * inp.F_norm);
+
+        let Dt_min = 1.0 / inp.lambda_intent;
+        let Dt_max = inp.n_max_batch / inp.lambda_intent;
+
+        return QosOutputs {
+            Ri_max: Ri_max,
+            token_rate_r: r,
+            bucket_B: B,
+            T_code_star: T_code_star,
+            qos_Q: Q,
+            Dt_min: Dt_min,
+            Dt_max: Dt_max,
+        };
+    }
+
+    fn to_json(out: QosOutputs) -> string {
+        let j = json.obj();
+        j.set("Ri_max", out.Ri_max);
+        j.set("token_rate_r", out.token_rate_r);
+        j.set("bucket_B", out.bucket_B);
+        j.set("T_code_star", out.T_code_star);
+        j.set("qos_Q", out.qos_Q);
+        j.set("Dt_min", out.Dt_min);
+        j.set("Dt_max", out.Dt_max);
+        return j.to_string();
+    }
+
+    export fn main() -> int {
+        let inp = load_policy();
+        let out = compute_qos(inp);
+        let s = to_json(out);
+        log.info("raptor_qos", "computed QoS parameters: " + s);
+        // Also print to stdout so IDE tools / Raptor-mini can capture it.
+        std.io.println(s);
+        return 0;
+    }
+}

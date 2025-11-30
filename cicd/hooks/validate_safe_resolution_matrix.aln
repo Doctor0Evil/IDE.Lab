@@ -1,0 +1,132 @@
+pipeline VALIDATE_SAFE_RESOLUTION_MATRIX {
+
+  imports {
+    compliance_matrix  : "/compliance/matrix/safe_resolution_matrix.aln"
+    hash_engine        : "sha256"
+    did_engine         : "did_ion"
+    time_engine        : "utc_clock"
+    kv_state           : "ci_cd_state_store"      # WORM-capable metadata store
+    log_stream         : "audit_worm_channel"
+  }
+
+  constants {
+    EXPECTED_VERSION        : "1.0"
+    EXPECTED_AUTHOR_DID     : "did:ion:EiD8J2b3K8k9Q8x9L7m2n4p1q5r6s7t8u9v0w1x2y3z4A5B6C7D8E9F0"
+    MATRIX_PATH             : "/compliance/matrix/safe_resolution_matrix.aln"
+    MATRIX_ID               : "SAFE_RESOLUTION"
+    COMPLIANCE_REQUIRED     : ["GDPR", "HIPAA", "ISO27001"]
+    BUILD_GATE_STRATEGY     : "fail_close"
+  }
+
+  step load_matrix {
+    action:
+      matrix_doc  = compliance_matrix.read(MATRIX_PATH)
+      meta        = compliance_matrix.read_header(MATRIX_PATH)
+  }
+
+  step validate_header {
+    require:
+      meta.Version       == EXPECTED_VERSION
+      meta.Author_DID    == EXPECTED_AUTHOR_DID
+      meta.LegalRefs.has_all(COMPLIANCE_REQUIRED)
+
+    on_fail:
+      log_stream.write({
+        ts          : time_engine.now(),
+        source      : MATRIX_ID,
+        severity    : "CRITICAL",
+        category    : "matrix_header_violation",
+        message     : "Compliance matrix header mismatch",
+        meta_diff   : diff(meta, {
+                          Version    : EXPECTED_VERSION,
+                          Author_DID : EXPECTED_AUTHOR_DID,
+                          LegalRefs  : COMPLIANCE_REQUIRED
+                        })
+      })
+      if BUILD_GATE_STRATEGY == "fail_close" {
+        ci.fail("SAFE_RESOLUTION header validation failed")
+      }
+  }
+
+  step compute_body_hash {
+    action:
+      body_segment = compliance_matrix.strip_trailer(matrix_doc)
+      body_hash    = hash_engine.sum256(body_segment)
+  }
+
+  step verify_trailer_hash {
+    action:
+      trailer = compliance_matrix.read_trailer(matrix_doc)
+
+    require:
+      trailer.SHA256_Matrix == body_hash
+
+    on_fail:
+      log_stream.write({
+        ts          : time_engine.now(),
+        source      : MATRIX_ID,
+        severity    : "CRITICAL",
+        category    : "matrix_integrity_breach",
+        message     : "SHA256 mismatch for SAFE_RESOLUTION matrix",
+        expected    : trailer.SHA256_Matrix,
+        computed    : body_hash
+      })
+      if BUILD_GATE_STRATEGY == "fail_close" {
+        ci.fail("SAFE_RESOLUTION matrix hash mismatch")
+      }
+  }
+
+  step verify_author_signature {
+    action:
+      sig_valid = did_engine.verify({
+        did        : meta.Author_DID,
+        payload    : body_hash,
+        signature  : trailer.Author_Signature
+      })
+
+    require:
+      sig_valid == true
+
+    on_fail:
+      log_stream.write({
+        ts          : time_engine.now(),
+        source      : MATRIX_ID,
+        severity    : "CRITICAL",
+        category    : "matrix_signature_invalid",
+        message     : "Author DID signature invalid for SAFE_RESOLUTION",
+        author_did  : meta.Author_DID
+      })
+      if BUILD_GATE_STRATEGY == "fail_close" {
+        ci.fail("SAFE_RESOLUTION matrix signature invalid")
+      }
+  }
+
+  step checkpoint_to_state {
+    action:
+      kv_state.put(MATRIX_ID, {
+        last_hash       : body_hash,
+        last_version    : meta.Version,
+        last_author_did : meta.Author_DID,
+        last_checked    : time_engine.now()
+      }, mode: "append_only")
+
+      log_stream.write({
+        ts          : time_engine.now(),
+        source      : MATRIX_ID,
+        severity    : "INFO",
+        category    : "matrix_validation_passed",
+        message     : "SAFE_RESOLUTION matrix validated and checkpointed",
+        hash        : body_hash,
+        version     : meta.Version,
+        author_did  : meta.Author_DID
+      })
+  }
+
+  gate before_build {
+    requires:
+      VALIDATE_SAFE_RESOLUTION_MATRIX.completed_successfully()
+
+    on_fail:
+      ci.block("Build blocked: SAFE_RESOLUTION matrix not validated")
+  }
+}

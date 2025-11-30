@@ -12,12 +12,22 @@ on:
 
 jobs:
   aln-validate-and-test:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, aln-no-python ]
     env:
       ALN_DIR: aln
+      DID_PROXY_URL: "https://did-proxy.example.org/ci/issue" # Replace with your DID proxy URL or repo variable
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up ALN toolchain
+        run: |
+          curl -sSL https://get.aln.sh/install | bash
+          echo "$HOME/.aln/bin" >> $GITHUB_PATH
+
+      - name: CI policy check (ALN)
+        run: |
+          aln run tools.policy_check
 
       - name: Enforce non-Python environment
         run: |
@@ -34,14 +44,14 @@ jobs:
       - name: Convert ALN to JSON projections
         run: |
           echo "Converting .aln documents to aln-json-projection format..."
-          # node scripts/aln-to-json-projection.cjs
+          aln run tools.to_json_projection
 
       - name: Run Ajv mesh sweep over ALN JSON views
         run: |
           echo "Running Ajv validation across all ALN JSON projections..."
-          # node scripts/aln-ajv-mesh-sweep.cjs
+          aln run tools.ajv_mesh_sweep
 
       - name: Evaluate severity gates
         run: |
           echo "Checking sevmesh-gate constraints (critical=0, high<=10)..."
-          # node scripts/aln-severity-gate.cjs
+          aln run tools.severity_gate

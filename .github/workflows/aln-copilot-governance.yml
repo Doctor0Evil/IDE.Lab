@@ -12,10 +12,19 @@ on:
 
 jobs:
   enforce-repo-policy:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, aln-no-python ]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up ALN toolchain
+        run: |
+          curl -sSL https://get.aln.sh/install | bash
+          echo "$HOME/.aln/bin" >> $GITHUB_PATH
+
+      - name: CI policy check (ALN)
+        run: |
+          aln run tools.policy_check
 
       - name: Load ALN repo policy contract
         run: |
@@ -33,4 +42,4 @@ jobs:
       - name: Run Copilot metaprompt tests
         run: |
           echo "Validating Copilot metaprompt integrity and governance alignment..."
-          # node scripts/aln-copilot-metatest.cjs
+          aln run tools.copilot_metatest

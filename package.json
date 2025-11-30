@@ -4,11 +4,11 @@
   "description": "ALN (Advanced Language Notation) GitHub Actions CI/CD integration",
   "private": true,
   "scripts": {
-    "aln:convert": "node scripts/aln-to-json-projection.cjs",
-    "aln:validate": "node scripts/aln-ajv-mesh-sweep.cjs",
-    "aln:severity-gate": "node scripts/aln-severity-gate.cjs",
-    "aln:metatest": "node scripts/aln-copilot-metatest.cjs",
-    "aln:ci": "npm run aln:convert && npm run aln:validate && npm run aln:severity-gate"
+    "aln:convert": "aln run tools.to_json_projection",
+    "aln:validate": "aln run tools.ajv_mesh_sweep",
+    "aln:severity-gate": "aln run tools.severity_gate",
+    "aln:metatest": "aln run tools.copilot_metatest",
+    "aln:ci": "aln run ci.core"
   },
   "keywords": [
     "aln",

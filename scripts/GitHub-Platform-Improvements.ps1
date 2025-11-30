@@ -1,3 +1,6 @@
+# Legacy: local platform improvements script (not executed in CI)
+# Note: This script is intended for local developer environments only.
+# It should not be invoked from CI workflows. Consider porting behavior to ALN modules if needed.
 <#
 GitHub-Platform-Improvements.ps1
 Aggregated platform improvement helpers: toolchain bootstrap, git identity, aliases, commit/push helper, gh convenience.

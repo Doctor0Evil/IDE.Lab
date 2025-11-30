@@ -1,0 +1,33 @@
+module tools.did_proxy_mock {
+    import std.log;
+    import std.time;
+    import std.json;
+
+    struct CiCapability {
+        value: string;
+        expires_at: string;
+        scope: string;
+    }
+
+    // Deterministic mock capability for CI demos/tests
+    fn generate_mock_capability() -> CiCapability {
+        let now = time.now();
+        let exp = (now + 60 * 5).to_rfc3339(); // expires in 5 minutes
+        let capability = "mock-capability-123456";
+        let scope = "github:repo:IDE.Lab:ci:test";
+        return CiCapability { value: capability, expires_at: exp, scope: scope };
+    }
+
+    fn print_mock_capability() -> int {
+        let cap = generate_mock_capability();
+        let payload = json.obj();
+        payload.set("capability", cap.value);
+        payload.set("expires_at", cap.expires_at);
+        payload.set("scope", cap.scope);
+        // Print to stdout for workflow visibility
+        log.info("did_proxy_mock", "Mock capability: " + payload.to_string());
+        return 0;
+    }
+
+    export fn main() -> int { return print_mock_capability(); }
+}

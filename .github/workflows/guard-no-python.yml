@@ -1,0 +1,79 @@
+name: Guard — No Python in CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  no-python-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Search workflow YAMLs for disallowed Python references
+        run: |
+          echo "Looking for 'python', 'python3', or 'pip' in workflow files..."
+          set -e
+          matches=$(grep -RIn "\bpython3?\b\|\bpip\b" .github/workflows || true)
+          if [ -n "$matches" ]; then
+            echo "Found disallowed Python references in CI workflows:";
+            echo "$matches";
+            exit 1;
+          fi
+          echo "No Python references found in workflows."
+
+      - name: Check scripts & config files for python references
+        run: |
+          echo "Looking for 'python', 'python3', 'pip' in top-level scripts and configs..."
+          matches=$(grep -RIn "\bpython3?\b\|\bpip\b" scripts || true)
+          matches2=$(grep -RIn "\bpython3?\b\|\bpip\b" . || true)
+          if [ -n "$matches" ] || [ -n "$matches2" ]; then
+            echo "Found 'python' references in repository files. Please migrate these or mark as non-CI-only."
+            echo "$matches"
+            echo "$matches2"
+            exit 1
+          fi
+          echo "No top-level Python references found in checked scripts/configs."
+
+      - name: Check for Python source files
+        run: |
+          echo "Looking for .py files in the repo (disallowed in CI execution path)..."
+          pyfiles=$(find . -type f -name "*.py" | sed 's|^\./||' || true)
+          if [ -n "$pyfiles" ]; then
+            echo "Found Python files in repo:";
+            echo "$pyfiles";
+            echo "Python files may be allowed for local tooling but must not be executed in CI. Please mark them in docs or remove from legacy CI paths.";
+            exit 1;
+          fi
+          echo "No Python files found in repo."
+
+      - name: Check run-time during CI (placeholder)
+        run: |
+          echo "Runtime log checks are not possible at static analysis time; runtime log greps need separate guard jobs or actions."
+          echo "If you need runtime check: add a job that scans running job logs for python/pip and fails; reach out to maintainers."
+
+      - name: Check for unapproved ALN proc.exec uses
+        run: |
+          echo "Scanning ALN source for proc.exec usage outside allowlist..."
+          matches=$(grep -RIn "proc.exec(" aln | grep -v "aln/tools" | grep -v "aln/ci" || true)
+          if [ -n "$matches" ]; then
+            echo "Found proc.exec usage in disallowed path:";
+            echo "$matches";
+            exit 1;
+          fi
+          echo "No disallowed proc.exec usage found."
+
+      - name: Scan for GitHub token usage
+        run: |
+          echo "Looking for GITHUB_TOKEN or GITHUB_PAT usage in workflows or scripts..."
+          token_matches=$(grep -RIn "GITHUB_TOKEN\|GITHUB_PAT\|Authorization: token\|Authorization: Bearer" .github/workflows scripts || true)
+          if [ -n "$token_matches" ]; then
+            echo "Found potential token usage in CI workflow or scripts:";
+            echo "$token_matches";
+            echo "Please replace token usage with DID-based proxy or wrap with ALN tools.did_proxy.";
+            exit 1
+          fi
+          echo "No GitHub token usage found in workflows or scripts."

@@ -1,0 +1,21 @@
+module tests.raptor_qos_validation {
+    import std.test;
+    import std.log;
+    import tools.raptor_qos;
+
+    @test
+    fn test_raptor_qos_outputs_valid() {
+        let inp = raptor_qos.load_policy();
+        let out = raptor_qos.compute_qos(inp);
+
+        test.assert_ge(out.Ri_max, 0.0, "Ri_max should be >= 0.0");
+        test.assert_ge(out.token_rate_r, 0.0, "token_rate_r should be >= 0.0");
+        test.assert_ge(out.bucket_B, 0.0, "bucket_B should be >= 0.0");
+        test.assert_ge(out.T_code_star, 0, "T_code_star should be >= 0");
+        test.assert_ge(out.qos_Q, 0.0, "qos_Q should be >= 0.0");
+        test.assert_le(out.qos_Q, 1.0, "qos_Q should be <= 1.0");
+
+        log.info("tests.raptor_qos_validation", "Qos outputs validated: Ri_max=" + out.Ri_max.to_string());
+    }
+
+}

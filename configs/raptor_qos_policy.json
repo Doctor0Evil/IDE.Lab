@@ -1,0 +1,24 @@
+{
+  "active_devs": 10,
+  "mean_latency_s": 1.0,
+  "concurrency": 16,
+  "rho_max": 0.7,
+
+  "ctx_tokens": 32768,
+  "alpha": 0.8,
+  "inst_tokens": 1024,
+  "meta_tokens": 512,
+  "code_min_tokens": 4096,
+
+  "L_norm": 0.3,
+  "E_norm": 0.05,
+  "F_norm": 0.02,
+  "beta_L": 0.4,
+  "beta_E": 0.4,
+  "beta_F": 0.2,
+
+  "lambda_intent": 0.5,
+  "n_max_batch": 5.0,
+  "Tw": 5.0,
+  "k_bucket": 3.0
+}

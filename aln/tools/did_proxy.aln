@@ -1,0 +1,83 @@
+module tools.did_proxy {
+    import std.http;
+    import std.json;
+    import std.log;
+    import std.env;
+    import std.time;
+
+    struct CiCapability {
+        value: string;
+        expires_at: string;
+        scope: string;
+    }
+
+    const ORG_DID: string = "did:ion:EiD8J2b3K8k9Q8x9L7m2n4p1q5r6s7t8u9v0w1x2y3z4A5B6C7D8E9F0";
+
+    // Request a CI capability from the configured DID proxy.
+    fn request_ci_capability(pipeline: string, branch: string) -> CiCapability {
+        let proxy_url = env.get("DID_PROXY_URL");
+        let mock_mode = env.get("DID_PROXY_MOCK");
+        if (mock_mode == "true") {
+            // Use the mock generator for tests
+            import tools.did_proxy_mock;
+            let cap = did_proxy_mock.generate_mock_capability();
+            return CiCapability { value: cap.value, expires_at: cap.expires_at, scope: cap.scope };
+        }
+        if (proxy_url == "") {
+            log.error("did_proxy", "DID_PROXY_URL env var not set; cannot get CI capability");
+            return CiCapability { value: "", expires_at: "", scope: "" };
+        }
+
+        let runner_id = env.get("GITHUB_RUN_ID");
+        if (runner_id == "") {
+            runner_id = "local";
+        }
+
+        let payload = json.obj();
+        payload.set("did", ORG_DID);
+        payload.set("pipeline", pipeline);
+        payload.set("branch", branch);
+        payload.set("runner_id", runner_id);
+        payload.set("requested_at", time.now().to_rfc3339());
+
+        log.info("did_proxy", "Requesting CI capability from DID proxy at " + proxy_url);
+
+        // Attempt to call the proxy endpoint - if the std.http library is present and network is allowed.
+        let resp = http.post_json(proxy_url, payload);
+        if resp.status != 200 {
+            log.error("did_proxy", "DID proxy request failed with status: " + resp.status.to_string());
+            return CiCapability { value: "", expires_at: "", scope: "" };
+        }
+
+        let body = json.parse(resp.body);
+        let capability_value = body.get_string("capability", "");
+        let expires_at = body.get_string("expires_at", "");
+        let scope = body.get_string("scope", "");
+
+        if capability_value == "" {
+            log.error("did_proxy", "DID proxy returned empty capability");
+            return CiCapability { value: "", expires_at: "", scope: "" };
+        }
+
+        return CiCapability {
+            value: capability_value,
+            expires_at: expires_at,
+            scope: scope,
+        };
+    }
+
+    fn debug_print_ci_capability() -> i32 {
+        let branch = env.get("GITHUB_REF_NAME");
+        if (branch == "") { branch = "local"; }
+        let cap = request_ci_capability("aln-ci-core", branch);
+        if (cap.value == "") {
+            log.error("did_proxy", "no CI capability obtained");
+            return 1;
+        }
+        log.info("did_proxy", "obtained CI capability with scope: " + cap.scope + ", expires: " + cap.expires_at);
+        // Do not log the actual capability value in production logs.
+        return 0;
+    }
+
+    export fn main() -> int { return debug_print_ci_capability(); }
+}

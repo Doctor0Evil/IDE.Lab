@@ -1,0 +1,27 @@
+module tools.inspect_wasm {
+    import std.fs;
+    import std.log;
+
+    fn contains_wasm_objdump(path: string) -> bool {
+        if (!std.fs.exists(path)) { return false; }
+        let content = std.fs.read_file(path);
+        return content.contains("wasm-objdump");
+    }
+
+    export fn main() -> i32 {
+        // Read an env var `WASM_PATH` or default to empty; for CI we expect the path to be set
+        let p = std.env.get("WASM_PATH");
+        if (p == "") {
+            log.error("tools.inspect_wasm", "Missing WASM_PATH env var");
+            return 2;
+        }
+
+        if (contains_wasm_objdump(p)) {
+            log.info("tools.inspect_wasm", "wasm-objdump found in file: " + p);
+            return 0;
+        } else {
+            log.info("tools.inspect_wasm", "wasm-objdump NOT found in file: " + p);
+            return 2;
+        }
+    }
+}

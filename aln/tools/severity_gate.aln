@@ -1,0 +1,56 @@
+module tools.severity_gate {
+    import std.fs;
+    import std.path;
+    import std.log;
+
+    const REPORT_PATH: string = "reports/aln-constraint-report.json";
+
+    fn determine_severity(errors) -> string {
+        // Simple heuristic: if errors contain 'required' or 'type', critical; else high.
+        for (e in errors) {
+            if (e.keyword == "required" || e.keyword == "type" || e.keyword == "enum") {
+                return "critical";
+            }
+        }
+        return "high";
+    }
+
+    export fn main() -> i32 {
+        log.info("tools.severity_gate", "Evaluating severity gate...");
+
+        if (!std.fs.exists(REPORT_PATH)) {
+            log.error("tools.severity_gate", "Missing constraint report: " + REPORT_PATH);
+            return 1;
+        }
+
+        let raw = std.fs.read_file(REPORT_PATH);
+        let report = std.json.parse(raw);
+
+        let violations = report["violations"];
+        let critical_count = 0;
+        let high_count = 0;
+
+        for (v in violations) {
+            let sev = v["severity"];
+            if (sev == "critical") { critical_count += 1; }
+            if (sev == "high") { high_count += 1; }
+        }
+
+        log.info("tools.severity_gate", "Total violations: " + violations.len().to_string());
+        log.info("tools.severity_gate", "Critical: " + critical_count.to_string());
+        log.info("tools.severity_gate", "High: " + high_count.to_string());
+
+        if (critical_count > 0) {
+            log.error("tools.severity_gate", "Critical violations present; failing CI.");
+            return 1;
+        }
+
+        if (high_count > 10) {
+            log.error("tools.severity_gate", "High violations exceed soft cap; failing CI.");
+            return 1;
+        }
+
+        log.info("tools.severity_gate", "Severity gate passed.");
+        return 0;
+    }
+}

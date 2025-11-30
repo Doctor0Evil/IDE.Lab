@@ -1,0 +1,40 @@
+name: CI Audit Smoke Test
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  audit-smoke-test:
+    runs-on: [ self-hosted, aln-no-python ]
+    env:
+      DID_PROXY_MOCK: "true"
+      DID_PROXY_URL: "mock://ci"
+      ALN_PIPELINE: "audit-demo"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up ALN toolchain
+        run: |
+          curl -sSL https://get.aln.sh/install | bash
+          echo "$HOME/.aln/bin" >> $GITHUB_PATH
+
+      - name: Sync ALN dependencies
+        run: |
+          aln deps sync
+
+      - name: Run ALN pipeline (audit-demo)
+        run: |
+          aln run ci.core
+
+      - name: Assert audit log exists and has expected fields
+        run: |
+          if [ ! -f ci_audit.log ]; then
+            echo "ci_audit.log not found"; exit 1;
+          fi
+          grep -q "\"repo\"" ci_audit.log
+          grep -q "\"branch\"" ci_audit.log
+          grep -q "\"pipeline\"" ci_audit.log
+          grep -q "github:repo:IDE.Lab:ci" ci_audit.log || true

@@ -57,11 +57,11 @@ Materialized GitHub Actions workflows:
 - .github/workflows/aln-firmware-update-lane.yml
 - .github/workflows/aln-ci-core.yml
 
-Supporting scripts (Node.js, non-Python):
-- scripts/aln-to-json-projection.cjs
-- scripts/aln-ajv-mesh-sweep.cjs
-- scripts/aln-severity-gate.cjs
-- scripts/aln-copilot-metatest.cjs
+ Supporting ALN tools/modules:
+ - aln/tools/to_json_projection.aln
+ - aln/tools/ajv_mesh_sweep.aln
+ - aln/tools/severity_gate.aln
+ - aln/tools/copilot_metatest.aln
 
 JSON Schema validation:
 - schemas/aln-core.schema.json

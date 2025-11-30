@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Legacy: Node.js helper for ALN toolchain (local only)
+// This script is maintained for local development/testing only.
+// Prefer calling the ALN module `aln run tools.severity_gate` in CI.
 /**
  * aln-severity-gate.cjs
  * 

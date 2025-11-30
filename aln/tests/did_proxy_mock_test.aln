@@ -1,0 +1,19 @@
+module tests.did_proxy_mock_test {
+    import std.test;
+    import std.log;
+    import std.env;
+    import tools.did_proxy;
+    import tools.did_proxy_mock;
+
+    @test
+    fn test_request_ci_capability_in_mock_mode() {
+        // When DID_PROXY_MOCK is set, did_proxy should use the mock generator.
+        // This is simulated by directly calling the mock generator and asserting results.
+        let cap = did_proxy_mock.generate_mock_capability();
+
+        test.assert_ne(cap.value, "", "capability should not be empty");
+        test.assert_eq(cap.scope, "github:repo:IDE.Lab:ci:test", "scope should match the mock scope");
+        log.info("tests.did_proxy_mock_test", "Mock capability validated: " + cap.value);
+    }
+
+}

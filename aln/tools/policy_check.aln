@@ -1,0 +1,109 @@
+module tools.policy_check {
+    import std.fs;
+    import std.path;
+    import std.json;
+    import std.log;
+    import std.proc;
+    import std.env;
+
+    fn load_policy() -> json.Node {
+        let p = "policy/ci_policies.json";
+        if (!fs.exists(p)) {
+            log.error("policy_check", "policy file not found: " + p);
+            return json.obj();
+        }
+        let raw = fs.read_file(p);
+        return json.parse(raw);
+    }
+
+    fn assert_required_envs(pol: json.Node) -> bool {
+        let req = pol.get_array("required_envs");
+        for (e in req) {
+            let key = e.to_string().replace("\"", "");
+            let val = env.get(key);
+            if (val == "") {
+                log.error("policy_check", "required env missing: " + key);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    fn check_no_python(pol: json.Node) -> bool {
+        if (!pol.get_bool("no_python_in_ci")) { return true; }
+        // simple check: search for python in PATH using `which` style
+        if (std.proc.which("python") || std.proc.which("python3")) {
+            log.error("policy_check", "python runtime detected in CI runner; disallowed by policy");
+            return false;
+        }
+        return true;
+    }
+
+    fn check_mock_allowed(pol: json.Node) -> bool {
+        let allow = pol.get_bool("allow_mock_mode");
+        if (!allow) { return true; }
+        // if DID_PROXY_MOCK=true confirm that mock_allowed_domains list includes DID_PROXY_URL
+        let mock_flag = env.get("DID_PROXY_MOCK");
+        if (mock_flag == "true") {
+            let url = env.get("DID_PROXY_URL");
+            let domains = pol.get_array("mock_allowed_domains");
+            for (d in domains) {
+                let dd = d.to_string().replace("\"", "");
+                if (url.contains(dd)) { return true; }
+            }
+            log.error("policy_check", "DID_PROXY_MOCK set but DID_PROXY_URL does not match allowed mock domains");
+            return false;
+        }
+        return true;
+    }
+
+    // Ensure proc.exec is only used inside allowed modules
+    fn check_proc_exec_pol(pol: json.Node) -> bool {
+        let allowed = pol.get_array("allowed_proc_exec_paths");
+        let files = std.fs.glob("aln/**/*.aln");
+        for (f in files) {
+            let content = std.fs.read_file(f);
+            if (content.contains("proc.exec(")) {
+                // find if this file's path matches one of allowed paths
+                let ok = false;
+                for (ap in allowed) {
+                    let pathPrefix = ap.to_string().replace("\"", "");
+                    if (f.starts_with(pathPrefix)) { ok = true; break; }
+                }
+                if (!ok) {
+                    log.error("policy_check", "Unapproved proc.exec use in: " + f);
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    fn check_gh_cli(pol: json.Node) -> bool {
+        let scan = pol.get_bool("scan_for_gh_cli");
+        if (!scan) { return true; }
+        let patternFiles = std.fs.glob("scripts/**/*.*");
+        for (pf in patternFiles) {
+            let content = std.fs.read_file(pf);
+            if (content.contains("gh ") || content.contains("gh" + "auth") || content.contains("gh pr")) {
+                log.error("policy_check", "GH CLI found in script file: " + pf + "; scripts with GH CLI must be flagged as local-only or migrated to ALN.");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    export fn main() -> int {
+        let pol = load_policy();
+        if (pol.is_null()) { log.error("policy_check", "unable to parse policy file"); return 1; }
+
+        if (!assert_required_envs(pol)) { return 1; }
+        if (!check_no_python(pol)) { return 1; }
+        if (!check_mock_allowed(pol)) { return 1; }
+        if (!check_proc_exec_pol(pol)) { return 1; }
+        if (!check_gh_cli(pol)) { return 1; }
+
+        log.info("policy_check", "policy validation passed");
+        return 0;
+    }
+}

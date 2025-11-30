@@ -1,0 +1,23 @@
+Raptor-mini Prompt: Generate ALN modules to replace Python CI/tools
+
+Role: Senior ALN CI engineer
+
+Goal: Replace any Python-based CI scripts with ALN modules and ensure GitHub Actions uses only ALN for linting, tests, and builds.
+
+Steps:
+1) Scan the repository for any Python scripts under `ci/`, `scripts/`, `tools/`, or `.github` that are called by GitHub Actions workflows, Makefiles, or Dockerfiles.
+2) For each referenced Python script, generate an ALN module that:
+   - Preserves behavior, args, env vars, exit codes, and logging.
+   - Uses ALN stdlib where possible.
+   - Exposes `export fn main() -> int` as the entrypoint.
+   - Lives under a namespace like `ci.lint`, `ci.test`.
+3) Write modules into an `aln/ci/` directory using `.aln` files and propose file names.
+4) Provide unified Git diffs:
+   - Add the new ALN modules.
+   - Update `.github/workflows/*.yml`, Makefiles, and Dockerfiles to call `aln run <module>`.
+5) Ensure generated code is deterministic and safe for GitHub Actions.
+
+Outputs:
+- Full ALN module code for each CI task.
+- Edited workflow YAML snippets for invoking the new modules.
+- A short checklist of remaining scripts safe to keep.

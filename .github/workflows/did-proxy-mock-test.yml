@@ -1,0 +1,37 @@
+name: DID Proxy Mock Test
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  did-proxy-mock-test:
+    runs-on: [ self-hosted, aln-no-python ]
+    env:
+      DID_PROXY_MOCK: "true"
+      DID_PROXY_URL: "mock://ci"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up ALN toolchain
+        run: |
+          curl -sSL https://get.aln.sh/install | bash
+          echo "$HOME/.aln/bin" >> $GITHUB_PATH
+
+      - name: Sync ALN dependencies
+        run: |
+          aln deps sync
+
+      - name: Run DID Proxy Mock (serverless)
+        run: |
+          aln run tools.did_proxy_mock
+
+      - name: Run DID Proxy (mock mode)
+        run: |
+          aln run tools.did_proxy
+
+      - name: Run ALN test for did proxy mock
+        run: |
+          aln test --filter did_proxy_mock_test --report junit:reports/did-proxy-mock-tests.xml

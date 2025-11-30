@@ -1,0 +1,43 @@
+name: Raptor QoS Smoke Test
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  raptor-qos-smoke-test:
+    runs-on: [ self-hosted, aln-no-python ]
+    env:
+      ALN_DIR: aln
+      RAPTOR_QOS_POLICY_PATH: configs/raptor_qos_policy.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up ALN toolchain
+        run: |
+          curl -sSL https://get.aln.sh/install | bash
+          echo "$HOME/.aln/bin" >> $GITHUB_PATH
+
+      - name: Sync ALN dependencies
+        run: |
+          aln deps sync
+
+      - name: Run Raptor QoS module tests
+        run: |
+          aln test --filter raptor_qos_validation --report junit:reports/raptor-qos-validation.xml
+
+      - name: Run QoS module and save JSON output
+        run: |
+          aln run tools.raptor_qos > raptor_qos_out.json
+
+      - name: Ensure QoS JSON has expected keys
+        run: |
+          if ! grep -q "\"Ri_max\"" raptor_qos_out.json; then
+            echo "Ri_max not present in output"; exit 1;
+          fi
+          if ! grep -q "\"qos_Q\"" raptor_qos_out.json; then
+            echo "qos_Q not present in output"; exit 1;
+          fi
+          echo "Raptor QoS output looks good";
