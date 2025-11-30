@@ -55,6 +55,17 @@ jobs:
           echo "Runtime log checks are not possible at static analysis time; runtime log greps need separate guard jobs or actions."
           echo "If you need runtime check: add a job that scans running job logs for python/pip and fails; reach out to maintainers."
 
+      - name: Check for unapproved ALN proc.exec uses
+        run: |
+          echo "Scanning ALN source for proc.exec usage outside allowlist..."
+          matches=$(grep -RIn "proc.exec(" aln | grep -v "aln/tools" | grep -v "aln/ci" || true)
+          if [ -n "$matches" ]; then
+            echo "Found proc.exec usage in disallowed path:";
+            echo "$matches";
+            exit 1;
+          fi
+          echo "No disallowed proc.exec usage found."
+
       - name: Scan for GitHub token usage
         run: |
           echo "Looking for GITHUB_TOKEN or GITHUB_PAT usage in workflows or scripts..."

@@ -9,12 +9,21 @@ on:
 
 jobs:
   aln-vm-bootstrap-check:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, aln-no-python ]
     env:
       ALN_DIR: aln
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up ALN toolchain
+        run: |
+          curl -sSL https://get.aln.sh/install | bash
+          echo "$HOME/.aln/bin" >> $GITHUB_PATH
+
+      - name: CI policy check (ALN)
+        run: |
+          aln run tools.policy_check
 
       - name: Enforce non-Python environment
         run: |
